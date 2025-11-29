@@ -7,6 +7,10 @@ A lightweight, context-aware clipboard manager for Windows that feels native to 
 ![Tauri](https://img.shields.io/badge/Tauri-24C8DB?style=flat&logo=tauri&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
+## Demo
+
+![ClipStream Demo](images/demo.png)
+
 ## Features
 
 - **Global Hotkey** - `Ctrl+Shift+V` to open anywhere
