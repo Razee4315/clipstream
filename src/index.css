@@ -28,6 +28,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  user-select: none;
 }
 
 html, body, #app {
@@ -83,6 +84,25 @@ body {
   color: var(--text-muted);
 }
 
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .item-count {
   font-size: 10px;
   color: var(--text-muted);
@@ -135,6 +155,8 @@ body {
   gap: 8px;
   cursor: pointer;
   border-bottom: 1px solid var(--border-color);
+  position: relative;
+  transition: background 0.1s ease;
 }
 
 .entry-item:hover {
@@ -223,13 +245,237 @@ body {
   border-radius: 3px;
   color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
+  transition: all 0.1s ease;
 }
 
 .action-btn:hover {
   background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
 }
 
 .action-btn.delete:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+/* Edit Input */
+.edit-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+}
+
+/* Image Preview */
+.image-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 60px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.image-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* Paste Format Menu */
+.paste-menu {
+  position: absolute;
+  top: 100%;
+  left: 40px;
+  right: 40px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.1s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.paste-menu button {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 10px;
+  border: none;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.paste-menu button:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* Settings View */
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-section {
+  padding: 12px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.settings-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.settings-desc {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.add-app-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.app-input {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.1s ease;
+}
+
+.app-input:focus {
+  border-color: var(--accent);
+}
+
+.app-input::placeholder {
+  color: var(--text-muted);
+}
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.add-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.ignored-apps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.empty-apps {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ignored-app-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.remove-btn:hover {
   background: #c42b1c;
   color: #ffffff;
 }
@@ -243,14 +489,14 @@ body {
 .shortcuts {
   display: flex;
   justify-content: center;
-  gap: 12px;
-  font-size: 10px;
+  gap: 10px;
+  font-size: 9px;
   color: var(--text-muted);
 }
 
 kbd {
   padding: 1px 4px;
-  font-size: 9px;
+  font-size: 8px;
   font-family: inherit;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
