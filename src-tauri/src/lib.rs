@@ -1,7 +1,7 @@
 mod clipboard;
 mod database;
 
-use clipboard::{ClipboardListener, set_clipboard_content};
+use clipboard::{ClipboardContent, ClipboardListener, set_clipboard_text};
 use database::{ClipboardEntry, Database};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
@@ -43,12 +43,48 @@ fn paste_entry(id: i64) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .ok_or("Entry not found")?;
     
-    set_clipboard_content(&entry.content)?;
+    set_clipboard_text(&entry.content)?;
     
     thread::sleep(Duration::from_millis(50));
     simulate_paste();
     
     Ok(())
+}
+
+#[tauri::command]
+fn paste_formatted(id: i64, format: String) -> Result<(), String> {
+    let entry = get_db()
+        .get_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Entry not found")?;
+    
+    let formatted = match format.as_str() {
+        "upper" => entry.content.to_uppercase(),
+        "lower" => entry.content.to_lowercase(),
+        "title" => to_title_case(&entry.content),
+        "trim" => entry.content.trim().to_string(),
+        "plain" | _ => entry.content.clone(),
+    };
+    
+    set_clipboard_text(&formatted)?;
+    
+    thread::sleep(Duration::from_millis(50));
+    simulate_paste();
+    
+    Ok(())
+}
+
+fn to_title_case(s: &str) -> String {
+    s.split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars.flat_map(|c| c.to_lowercase())).collect(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[tauri::command]
@@ -58,7 +94,7 @@ fn copy_entry(id: i64) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .ok_or("Entry not found")?;
     
-    set_clipboard_content(&entry.content)
+    set_clipboard_text(&entry.content)
 }
 
 #[tauri::command]
@@ -76,6 +112,13 @@ fn delete_entry(id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn update_entry(id: i64, content: String) -> Result<(), String> {
+    get_db()
+        .update_content(id, &content)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn hide_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window.hide().map_err(|e| e.to_string())?;
@@ -83,18 +126,85 @@ fn hide_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================================
+// Ignored Apps Management
+// ============================================================================
+
+#[tauri::command]
+fn get_ignored_apps() -> Result<Vec<String>, String> {
+    get_db()
+        .get_ignored_apps()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_ignored_app(app_name: String) -> Result<(), String> {
+    get_db()
+        .add_ignored_app(&app_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_ignored_app(app_name: String) -> Result<(), String> {
+    get_db()
+        .remove_ignored_app(&app_name)
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Settings Management
+// ============================================================================
+
+#[tauri::command]
+fn get_setting(key: String) -> Result<Option<String>, String> {
+    get_db()
+        .get_setting(&key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_setting(key: String, value: String) -> Result<(), String> {
+    get_db()
+        .set_setting(&key, &value)
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Paste Simulation (cross-platform)
+// ============================================================================
+
 fn simulate_paste() {
     use enigo::{Enigo, Key, Keyboard, Settings};
     
-    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    let mut enigo = match Enigo::new(&Settings::default()) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    
     thread::sleep(Duration::from_millis(100));
     
-    let _ = enigo.key(Key::Control, enigo::Direction::Press);
-    let _ = enigo.key(Key::Unicode('v'), enigo::Direction::Click);
-    let _ = enigo.key(Key::Control, enigo::Direction::Release);
+    #[cfg(target_os = "macos")]
+    {
+        // macOS uses Command+V
+        let _ = enigo.key(Key::Meta, enigo::Direction::Press);
+        let _ = enigo.key(Key::Unicode('v'), enigo::Direction::Click);
+        let _ = enigo.key(Key::Meta, enigo::Direction::Release);
+    }
+    
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows and Linux use Ctrl+V
+        let _ = enigo.key(Key::Control, enigo::Direction::Press);
+        let _ = enigo.key(Key::Unicode('v'), enigo::Direction::Click);
+        let _ = enigo.key(Key::Control, enigo::Direction::Release);
+    }
 }
 
-#[cfg(windows)]
+// ============================================================================
+// Window Positioning (cross-platform)
+// ============================================================================
+
+#[cfg(target_os = "windows")]
 fn get_cursor_and_screen_info() -> Option<(i32, i32, i32, i32)> {
     use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
     use windows::Win32::Foundation::POINT;
@@ -111,7 +221,47 @@ fn get_cursor_and_screen_info() -> Option<(i32, i32, i32, i32)> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn get_cursor_and_screen_info() -> Option<(i32, i32, i32, i32)> {
+    use std::process::Command;
+    
+    // Get cursor position using cliclick or AppleScript
+    let output = Command::new("osascript")
+        .args(["-e", "tell application \"System Events\" to get position of (first window whose frontmost is true) as list"])
+        .output()
+        .ok()?;
+    
+    // Fallback: use default screen center for now
+    // In production, you'd use Core Graphics APIs
+    Some((500, 300, 1920, 1080))
+}
+
+#[cfg(target_os = "linux")]
+fn get_cursor_and_screen_info() -> Option<(i32, i32, i32, i32)> {
+    use std::process::Command;
+    
+    // Try xdotool for X11
+    if let Ok(output) = Command::new("xdotool").args(["getmouselocation"]).output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            // Parse "x:123 y:456 ..."
+            let mut x = 500i32;
+            let mut y = 300i32;
+            for part in text.split_whitespace() {
+                if let Some(val) = part.strip_prefix("x:") {
+                    x = val.parse().unwrap_or(500);
+                } else if let Some(val) = part.strip_prefix("y:") {
+                    y = val.parse().unwrap_or(300);
+                }
+            }
+            return Some((x, y, 1920, 1080));
+        }
+    }
+    
+    Some((500, 300, 1920, 1080))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 fn get_cursor_and_screen_info() -> Option<(i32, i32, i32, i32)> {
     None
 }
@@ -181,11 +331,36 @@ pub fn run() {
         eprintln!("Cleanup error: {}", e);
     }
     
+    // Get ignored apps for filtering
+    let ignored_apps = db.get_ignored_apps().unwrap_or_default();
+    
     let listener = ClipboardListener::new();
     let db_clone = db.clone();
     listener.start(move |content, source_app| {
-        if let Err(e) = db_clone.insert(&content, source_app.as_deref()) {
-            eprintln!("Failed to save clipboard entry: {}", e);
+        // Check if source app is ignored
+        if let Some(ref app) = source_app {
+            let app_lower = app.to_lowercase();
+            if ignored_apps.iter().any(|ignored| app_lower.contains(&ignored.to_lowercase())) {
+                return; // Skip ignored apps
+            }
+        }
+        
+        match content {
+            ClipboardContent::Text(text) => {
+                if let Err(e) = db_clone.insert(&text, source_app.as_deref(), None) {
+                    eprintln!("Failed to save clipboard entry: {}", e);
+                }
+            }
+            ClipboardContent::Image { data, width, height } => {
+                // Encode image as base64 for storage
+                if let Ok(png_data) = encode_rgba_to_png(&data, width, height) {
+                    let base64_str = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_data);
+                    let preview = format!("[Image {}x{}]", width, height);
+                    if let Err(e) = db_clone.insert(&preview, source_app.as_deref(), Some(&base64_str)) {
+                        eprintln!("Failed to save clipboard image: {}", e);
+                    }
+                }
+            }
         }
     });
     LISTENER.set(listener).expect("Failed to set listener");
@@ -205,10 +380,17 @@ pub fn run() {
             search_history,
             get_entry,
             paste_entry,
+            paste_formatted,
             copy_entry,
             toggle_pin,
             delete_entry,
+            update_entry,
             hide_window,
+            get_ignored_apps,
+            add_ignored_app,
+            remove_ignored_app,
+            get_setting,
+            set_setting,
         ])
         .setup(|app| {
             setup_tray(app.handle())?;
@@ -228,4 +410,22 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Encode RGBA bytes to PNG
+fn encode_rgba_to_png(data: &[u8], width: usize, height: usize) -> Result<Vec<u8>, String> {
+    use image::{ImageBuffer, Rgba};
+    
+    let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_raw(
+        width as u32,
+        height as u32,
+        data.to_vec(),
+    ).ok_or("Failed to create image buffer")?;
+    
+    let mut png_bytes = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut png_bytes);
+    img.write_to(&mut cursor, image::ImageFormat::Png)
+        .map_err(|e| format!("Failed to encode PNG: {}", e))?;
+    
+    Ok(png_bytes)
 }

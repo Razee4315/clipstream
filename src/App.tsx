@@ -9,7 +9,11 @@ interface ClipboardEntry {
   content_type: string;
   created_at: string;
   is_pinned: boolean;
+  content_blob: string | null;
 }
+
+type ViewMode = 'list' | 'settings';
+type PasteFormat = 'plain' | 'upper' | 'lower' | 'title' | 'trim';
 
 const Icons = {
   search: (
@@ -37,6 +41,12 @@ const Icons = {
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
       <path d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1.002 1.002 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4.018 4.018 0 0 1-.128-1.287z"/>
       <path d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243L6.586 4.672z"/>
+    </svg>
+  ),
+  image: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+      <path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z"/>
     </svg>
   ),
   pin: (
@@ -77,22 +87,44 @@ const Icons = {
       <path fillRule="evenodd" d="M0 .5A.5.5 0 0 1 .5 0h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 0 .5zm0 2A.5.5 0 0 1 .5 2h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 2A.5.5 0 0 1 .5 4h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 2A.5.5 0 0 1 .5 6h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5zm0 2A.5.5 0 0 1 .5 8h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5z"/>
     </svg>
   ),
+  settings: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+      <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+    </svg>
+  ),
+  edit: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+    </svg>
+  ),
+  back: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path fillRule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+    </svg>
+  ),
+  plus: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+    </svg>
+  ),
 };
 
 function getAppIcon(app: string | null, contentType: string) {
+  if (contentType === 'image') return Icons.image;
   if (!app) return Icons.clipboard;
   
   const appLower = app.toLowerCase();
-  if (appLower.includes('chrome') || appLower.includes('firefox') || appLower.includes('edge') || appLower.includes('brave')) {
+  if (appLower.includes('chrome') || appLower.includes('firefox') || appLower.includes('edge') || appLower.includes('brave') || appLower.includes('safari')) {
     return Icons.globe;
   }
-  if (appLower.includes('code') || appLower.includes('sublime') || appLower.includes('notepad++')) {
+  if (appLower.includes('code') || appLower.includes('sublime') || appLower.includes('notepad++') || appLower.includes('vim') || appLower.includes('emacs')) {
     return Icons.code;
   }
-  if (appLower.includes('terminal') || appLower.includes('cmd') || appLower.includes('powershell')) {
+  if (appLower.includes('terminal') || appLower.includes('cmd') || appLower.includes('powershell') || appLower.includes('iterm') || appLower.includes('konsole')) {
     return Icons.terminal;
   }
-  if (appLower.includes('explorer')) {
+  if (appLower.includes('explorer') || appLower.includes('finder') || appLower.includes('nautilus')) {
     return Icons.file;
   }
   
@@ -115,7 +147,85 @@ function formatTime(dateStr: string): string {
 
 function getAppDisplayName(app: string | null): string {
   if (!app) return 'Unknown';
-  return app.replace('.exe', '').replace('.EXE', '');
+  return app.replace('.exe', '').replace('.EXE', '').replace('.app', '');
+}
+
+// Settings View Component
+function SettingsView({ onBack, isDark }: { onBack: () => void; isDark: boolean }) {
+  const [ignoredApps, setIgnoredApps] = useState<string[]>([]);
+  const [newApp, setNewApp] = useState('');
+
+  useEffect(() => {
+    loadIgnoredApps();
+  }, []);
+
+  const loadIgnoredApps = async () => {
+    try {
+      const apps = await invoke<string[]>('get_ignored_apps');
+      setIgnoredApps(apps);
+    } catch (e) {
+      console.error('Failed to load ignored apps:', e);
+    }
+  };
+
+  const addApp = async () => {
+    if (!newApp.trim()) return;
+    try {
+      await invoke('add_ignored_app', { appName: newApp.trim() });
+      setNewApp('');
+      await loadIgnoredApps();
+    } catch (e) {
+      console.error('Failed to add app:', e);
+    }
+  };
+
+  const removeApp = async (appName: string) => {
+    try {
+      await invoke('remove_ignored_app', { appName });
+      await loadIgnoredApps();
+    } catch (e) {
+      console.error('Failed to remove app:', e);
+    }
+  };
+
+  return (
+    <div className="settings-view">
+      <div className="settings-header">
+        <button onClick={onBack} className="back-btn">{Icons.back}</button>
+        <span>Settings</span>
+      </div>
+      
+      <div className="settings-section">
+        <h3>Ignored Apps</h3>
+        <p className="settings-desc">Clipboard from these apps won't be saved</p>
+        
+        <div className="add-app-row">
+          <input
+            type="text"
+            value={newApp}
+            onInput={(e) => setNewApp((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => e.key === 'Enter' && addApp()}
+            placeholder="App name (e.g., 1Password)"
+            className="app-input"
+          />
+          <button onClick={addApp} className="add-btn">{Icons.plus}</button>
+        </div>
+        
+        <div className="ignored-apps-list">
+          {ignoredApps.length === 0 ? (
+            <div className="empty-apps">No ignored apps</div>
+          ) : (
+            ignoredApps.map((app) => (
+              <div key={app} className="ignored-app-item">
+                <span>{app}</span>
+                <button onClick={() => removeApp(app)} className="remove-btn">{Icons.trash}</button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function App() {
@@ -123,8 +233,13 @@ export function App() {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isDark, setIsDark] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
+  const [showPasteMenu, setShowPasteMenu] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLInputElement>(null);
 
   const loadEntries = useCallback(async () => {
     try {
@@ -153,8 +268,10 @@ export function App() {
   }, [loadEntries]);
 
   useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
+    if (viewMode === 'list') {
+      searchRef.current?.focus();
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     if (listRef.current && entries.length > 0 && selectedIndex < entries.length) {
@@ -163,7 +280,24 @@ export function App() {
     }
   }, [selectedIndex, entries.length]);
 
+  useEffect(() => {
+    if (editingId !== null && editRef.current) {
+      editRef.current.focus();
+      editRef.current.select();
+    }
+  }, [editingId]);
+
   const handleKeyDown = async (e: KeyboardEvent) => {
+    if (editingId !== null) {
+      if (e.key === 'Escape') {
+        setEditingId(null);
+        setEditText('');
+      } else if (e.key === 'Enter') {
+        await saveEdit();
+      }
+      return;
+    }
+
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -175,13 +309,19 @@ export function App() {
         break;
       case 'Enter':
         e.preventDefault();
-        if (entries[selectedIndex]) {
+        if (e.shiftKey) {
+          setShowPasteMenu(!showPasteMenu);
+        } else if (entries[selectedIndex]) {
           await handlePaste(entries[selectedIndex].id);
         }
         break;
       case 'Escape':
         e.preventDefault();
-        await invoke('hide_window');
+        if (showPasteMenu) {
+          setShowPasteMenu(false);
+        } else {
+          await invoke('hide_window');
+        }
         break;
       case 'Delete':
         if (e.shiftKey && entries[selectedIndex]) {
@@ -189,7 +329,30 @@ export function App() {
           await handleDelete(entries[selectedIndex].id);
         }
         break;
+      case 'F2':
+        if (entries[selectedIndex] && entries[selectedIndex].content_type !== 'image') {
+          e.preventDefault();
+          startEdit(entries[selectedIndex]);
+        }
+        break;
     }
+  };
+
+  const startEdit = (entry: ClipboardEntry) => {
+    setEditingId(entry.id);
+    setEditText(entry.content);
+  };
+
+  const saveEdit = async () => {
+    if (editingId === null) return;
+    try {
+      await invoke('update_entry', { id: editingId, content: editText });
+      await loadEntries();
+    } catch (e) {
+      console.error('Failed to save edit:', e);
+    }
+    setEditingId(null);
+    setEditText('');
   };
 
   const handlePaste = async (id: number) => {
@@ -197,6 +360,17 @@ export function App() {
       await invoke('hide_window');
       await new Promise(resolve => setTimeout(resolve, 100));
       await invoke('paste_entry', { id });
+    } catch (e) {
+      console.error('Failed to paste:', e);
+    }
+  };
+
+  const handlePasteFormatted = async (id: number, format: PasteFormat) => {
+    try {
+      setShowPasteMenu(false);
+      await invoke('hide_window');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await invoke('paste_formatted', { id, format });
     } catch (e) {
       console.error('Failed to paste:', e);
     }
@@ -231,6 +405,14 @@ export function App() {
     }
   };
 
+  if (viewMode === 'settings') {
+    return (
+      <div className={`app-container ${isDark ? 'dark' : 'light'}`}>
+        <SettingsView onBack={() => setViewMode('list')} isDark={isDark} />
+      </div>
+    );
+  }
+
   return (
     <div 
       className={`app-container ${isDark ? 'dark' : 'light'}`}
@@ -246,6 +428,9 @@ export function App() {
           placeholder="Search..."
           className="search-input"
         />
+        <button onClick={() => setViewMode('settings')} className="settings-btn" title="Settings">
+          {Icons.settings}
+        </button>
         <span className="item-count">{entries.length}</span>
       </div>
 
@@ -260,7 +445,7 @@ export function App() {
             <div
               key={entry.id}
               onClick={() => setSelectedIndex(index)}
-              onDblClick={() => handlePaste(entry.id)}
+              onDblClick={() => entry.content_type !== 'image' ? startEdit(entry) : handlePaste(entry.id)}
               className={`entry-item ${index === selectedIndex ? 'selected' : ''}`}
             >
               <div className="entry-icon">
@@ -268,7 +453,23 @@ export function App() {
               </div>
               
               <div className="entry-content">
-                <p className="entry-text">{entry.content}</p>
+                {editingId === entry.id ? (
+                  <input
+                    ref={editRef}
+                    type="text"
+                    value={editText}
+                    onInput={(e) => setEditText((e.target as HTMLInputElement).value)}
+                    onBlur={saveEdit}
+                    className="edit-input"
+                  />
+                ) : entry.content_type === 'image' && entry.content_blob ? (
+                  <div className="image-preview">
+                    <img src={`data:image/png;base64,${entry.content_blob}`} alt="Clipboard" />
+                    <span className="image-label">{entry.content}</span>
+                  </div>
+                ) : (
+                  <p className="entry-text">{entry.content}</p>
+                )}
                 <div className="entry-meta">
                   <span>{getAppDisplayName(entry.source_app)}</span>
                   <span>·</span>
@@ -282,6 +483,11 @@ export function App() {
                 )}
                 {index === selectedIndex && (
                   <>
+                    {entry.content_type !== 'image' && (
+                      <button onClick={(e) => { e.stopPropagation(); startEdit(entry); }} className="action-btn" title="Edit (F2)">
+                        {Icons.edit}
+                      </button>
+                    )}
                     <button onClick={(e) => handlePin(entry.id, e)} className="action-btn" title="Pin">
                       {Icons.pinOutline}
                     </button>
@@ -294,6 +500,17 @@ export function App() {
                   </>
                 )}
               </div>
+
+              {/* Paste Format Menu */}
+              {showPasteMenu && index === selectedIndex && entry.content_type !== 'image' && (
+                <div className="paste-menu">
+                  <button onClick={() => handlePasteFormatted(entry.id, 'plain')}>Plain</button>
+                  <button onClick={() => handlePasteFormatted(entry.id, 'upper')}>UPPER</button>
+                  <button onClick={() => handlePasteFormatted(entry.id, 'lower')}>lower</button>
+                  <button onClick={() => handlePasteFormatted(entry.id, 'title')}>Title</button>
+                  <button onClick={() => handlePasteFormatted(entry.id, 'trim')}>Trim</button>
+                </div>
+              )}
             </div>
           ))
         )}
@@ -303,6 +520,8 @@ export function App() {
         <div className="shortcuts">
           <span><kbd>↑↓</kbd>Nav</span>
           <span><kbd>↵</kbd>Paste</span>
+          <span><kbd>⇧↵</kbd>Format</span>
+          <span><kbd>F2</kbd>Edit</span>
           <span><kbd>Esc</kbd>Close</span>
         </div>
       </div>

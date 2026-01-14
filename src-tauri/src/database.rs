@@ -11,6 +11,7 @@ pub struct ClipboardEntry {
     pub content_type: String,
     pub created_at: String,
     pub is_pinned: bool,
+    pub content_blob: Option<String>, // Base64 encoded image data
 }
 
 #[derive(Debug)]
@@ -27,6 +28,7 @@ impl Database {
         
         let conn = Connection::open(&db_path)?;
         
+        // Main clipboard history table
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS clipboard_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +36,8 @@ impl Database {
                 source_app TEXT,
                 content_type TEXT DEFAULT 'text',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_pinned BOOLEAN DEFAULT 0
+                is_pinned BOOLEAN DEFAULT 0,
+                content_blob TEXT
             );
             
             CREATE INDEX IF NOT EXISTS idx_created_at ON clipboard_history(created_at DESC);
@@ -65,6 +68,33 @@ impl Database {
             END;"
         )?;
         
+        // Ignored apps table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS ignored_apps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_name TEXT UNIQUE NOT NULL
+            );"
+        )?;
+        
+        // Settings table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );"
+        )?;
+        
+        // Add content_blob column if it doesn't exist (migration)
+        let has_blob: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_history') WHERE name = 'content_blob'",
+            [],
+            |row| row.get(0)
+        ).unwrap_or(false);
+        
+        if !has_blob {
+            conn.execute("ALTER TABLE clipboard_history ADD COLUMN content_blob TEXT", [])?;
+        }
+        
         Ok(Self { conn: Mutex::new(conn) })
     }
     
@@ -75,35 +105,43 @@ impl Database {
         path
     }
     
-    pub fn insert(&self, content: &str, source_app: Option<&str>) -> Result<i64, rusqlite::Error> {
+    pub fn insert(&self, content: &str, source_app: Option<&str>, content_blob: Option<&str>) -> Result<i64, rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
         
-        // Check for duplicate
-        let exists: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM clipboard_history WHERE content = ?1 ORDER BY created_at DESC LIMIT 1)",
-            params![content],
-            |row| row.get(0)
-        ).unwrap_or(false);
+        // Check for duplicate (skip if content is just an image placeholder)
+        let is_image = content.starts_with("[Image ");
         
-        if exists {
-            // Update timestamp of existing entry
-            conn.execute(
-                "UPDATE clipboard_history SET created_at = CURRENT_TIMESTAMP, source_app = COALESCE(?2, source_app) WHERE content = ?1",
-                params![content, source_app]
-            )?;
-            let id: i64 = conn.query_row(
-                "SELECT id FROM clipboard_history WHERE content = ?1",
+        if !is_image {
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM clipboard_history WHERE content = ?1 ORDER BY created_at DESC LIMIT 1)",
                 params![content],
                 |row| row.get(0)
-            )?;
-            return Ok(id);
+            ).unwrap_or(false);
+            
+            if exists {
+                // Update timestamp of existing entry
+                conn.execute(
+                    "UPDATE clipboard_history SET created_at = CURRENT_TIMESTAMP, source_app = COALESCE(?2, source_app) WHERE content = ?1",
+                    params![content, source_app]
+                )?;
+                let id: i64 = conn.query_row(
+                    "SELECT id FROM clipboard_history WHERE content = ?1",
+                    params![content],
+                    |row| row.get(0)
+                )?;
+                return Ok(id);
+            }
         }
         
-        let content_type = Self::detect_content_type(content);
+        let content_type = if content_blob.is_some() {
+            "image"
+        } else {
+            Self::detect_content_type(content)
+        };
         
         conn.execute(
-            "INSERT INTO clipboard_history (content, source_app, content_type) VALUES (?1, ?2, ?3)",
-            params![content, source_app, content_type]
+            "INSERT INTO clipboard_history (content, source_app, content_type, content_blob) VALUES (?1, ?2, ?3, ?4)",
+            params![content, source_app, content_type, content_blob]
         )?;
         
         Ok(conn.last_insert_rowid())
@@ -130,7 +168,7 @@ impl Database {
         
         if query_trimmed.is_empty() {
             let mut stmt = conn.prepare(
-                "SELECT id, content, source_app, content_type, created_at, is_pinned 
+                "SELECT id, content, source_app, content_type, created_at, is_pinned, content_blob 
                  FROM clipboard_history 
                  ORDER BY is_pinned DESC, created_at DESC 
                  LIMIT ?1"
@@ -144,6 +182,7 @@ impl Database {
                     content_type: row.get(3)?,
                     created_at: row.get(4)?,
                     is_pinned: row.get(5)?,
+                    content_blob: row.get(6)?,
                 })
             })?.collect::<Result<Vec<_>, _>>()?;
             
@@ -154,7 +193,7 @@ impl Database {
         let fts_query = format!("{}*", query_trimmed.replace("\"", ""));
         
         let mut stmt = conn.prepare(
-            "SELECT h.id, h.content, h.source_app, h.content_type, h.created_at, h.is_pinned
+            "SELECT h.id, h.content, h.source_app, h.content_type, h.created_at, h.is_pinned, h.content_blob
              FROM clipboard_history h
              JOIN history_fts fts ON h.id = fts.rowid
              WHERE history_fts MATCH ?1
@@ -170,6 +209,7 @@ impl Database {
                 content_type: row.get(3)?,
                 created_at: row.get(4)?,
                 is_pinned: row.get(5)?,
+                content_blob: row.get(6)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
@@ -180,7 +220,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, content, source_app, content_type, created_at, is_pinned 
+            "SELECT id, content, source_app, content_type, created_at, is_pinned, content_blob 
              FROM clipboard_history WHERE id = ?1"
         )?;
         
@@ -194,10 +234,20 @@ impl Database {
                 content_type: row.get(3)?,
                 created_at: row.get(4)?,
                 is_pinned: row.get(5)?,
+                content_blob: row.get(6)?,
             }))
         } else {
             Ok(None)
         }
+    }
+    
+    pub fn update_content(&self, id: i64, content: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE clipboard_history SET content = ?1 WHERE id = ?2",
+            params![content, id]
+        )?;
+        Ok(())
     }
     
     pub fn toggle_pin(&self, id: i64) -> Result<bool, rusqlite::Error> {
@@ -246,6 +296,60 @@ impl Database {
         )?;
         
         Ok(deleted_old + deleted_excess)
+    }
+    
+    // ========================================================================
+    // Ignored Apps
+    // ========================================================================
+    
+    pub fn get_ignored_apps(&self) -> Result<Vec<String>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT app_name FROM ignored_apps ORDER BY app_name")?;
+        let apps = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(apps)
+    }
+    
+    pub fn add_ignored_app(&self, app_name: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO ignored_apps (app_name) VALUES (?1)",
+            params![app_name]
+        )?;
+        Ok(())
+    }
+    
+    pub fn remove_ignored_app(&self, app_name: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM ignored_apps WHERE app_name = ?1", params![app_name])?;
+        Ok(())
+    }
+    
+    // ========================================================================
+    // Settings
+    // ========================================================================
+    
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let result: Result<String, _> = conn.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key],
+            |row| row.get(0)
+        );
+        
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+    
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![key, value]
+        )?;
+        Ok(())
     }
     
     pub fn get_last_content(&self) -> Result<Option<String>, rusqlite::Error> {
