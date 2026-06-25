@@ -42,6 +42,9 @@ set(SOURCES
     src/core/ClipboardMonitor.cpp
     src/core/ClipboardMonitor.h
     src/core/ContentClassifier.cpp
+    src/core/ContentClassifier.h
+    src/core/MathEval.cpp
+    src/core/MathEval.h
     src/core/ClipEntry.h
     # ui
     src/ui/OverlayWindow.cpp

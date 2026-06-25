@@ -1,7 +1,9 @@
 #include "ui/OverlayWindow.h"
 
 #include "core/ClipboardMonitor.h"
+#include "core/ContentClassifier.h"
 #include "core/Database.h"
+#include "core/MathEval.h"
 #include "platform/PasteSimulator.h"
 #include "theme.h"
 #include "ui/EntryDelegate.h"
@@ -10,7 +12,10 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QColor>
 #include <QCursor>
+#include <QDesktopServices>
+#include <QDir>
 #include <QEvent>
 #include <QFile>
 #include <QGraphicsDropShadowEffect>
@@ -22,12 +27,25 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QMenu>
+#include <QProcess>
 #include <QPushButton>
 #include <QScreen>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace {
+
+QString colorToHsl(const QColor& c) {
+    return QStringLiteral("hsl(%1, %2%, %3%)")
+        .arg(qMax(0, c.hslHue()))
+        .arg(qRound(c.hslSaturationF() * 100))
+        .arg(qRound(c.lightnessF() * 100));
+}
+
+QString colorToRgb(const QColor& c) {
+    return QStringLiteral("rgb(%1, %2, %3)").arg(c.red()).arg(c.green()).arg(c.blue());
+}
 
 QString toTitleCase(const QString& s) {
     QString out = s.toLower();
@@ -121,7 +139,7 @@ void OverlayWindow::buildUi() {
 
     // --- Footer hints ---------------------------------------------------------
     auto* footer = new QLabel(
-        QStringLiteral("↑↓ Navigate   ↵ Paste   ⇧↵ Format   F2 Edit   ⇧⌦ Delete   Esc Close"),
+        QStringLiteral("↵ Paste   ⇧↵ Format   ^O Open   ^N Snippet   F2 Edit   ⇧⌦ Delete   Esc"),
         m_card);
     footer->setObjectName(QStringLiteral("footer"));
     footer->setAlignment(Qt::AlignCenter);
@@ -321,6 +339,7 @@ void OverlayWindow::showContextMenu(const QPoint& globalPos) {
     if (!e)
         return;
     QMenu menu(this);
+    addSmartActions(menu, *e); // type-specific actions first, if any
     menu.addAction(QStringLiteral("Paste"), [this] { pasteCurrent(); });
     menu.addAction(QStringLiteral("Copy"), [this] { copyCurrent(); });
     menu.addAction(e->pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin"),
@@ -330,6 +349,101 @@ void OverlayWindow::showContextMenu(const QPoint& globalPos) {
     menu.addSeparator();
     menu.addAction(QStringLiteral("Delete"), [this] { deleteCurrent(); });
     menu.exec(globalPos);
+}
+
+// Adds context-menu entries that only make sense for this clip's type:
+// open links, open/reveal files, convert colours, evaluate arithmetic.
+void OverlayWindow::addSmartActions(QMenu& menu, const ClipEntry& entry) {
+    bool added = false;
+
+    if (entry.type == ContentType::Url) {
+        const QString url = entry.content.trimmed();
+        menu.addAction(QStringLiteral("Open link"), [this, url] {
+            hide();
+            QDesktopServices::openUrl(QUrl::fromUserInput(url));
+        });
+        added = true;
+    } else if (entry.type == ContentType::FilePath) {
+        const QString path = entry.content.trimmed();
+        menu.addAction(QStringLiteral("Open file"), [this, path] {
+            hide();
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        });
+        menu.addAction(QStringLiteral("Show in folder"), [path] {
+            QProcess::startDetached(QStringLiteral("explorer.exe"),
+                                    {QStringLiteral("/select,") + QDir::toNativeSeparators(path)});
+        });
+        added = true;
+    } else if (entry.type == ContentType::Color) {
+        const QColor c(entry.content.trimmed());
+        if (c.isValid()) {
+            auto* sub = menu.addMenu(QStringLiteral("Copy colour as"));
+            const QString hex = c.name(QColor::HexRgb);
+            const QString rgb = colorToRgb(c);
+            const QString hsl = colorToHsl(c);
+            sub->addAction(hex, [this, hex] { copyRawText(hex); });
+            sub->addAction(rgb, [this, rgb] { copyRawText(rgb); });
+            sub->addAction(hsl, [this, hsl] { copyRawText(hsl); });
+            added = true;
+        }
+    }
+
+    if (const auto result = MathEval::evaluate(entry.content)) {
+        const QString text = QString::number(*result, 'g', 12);
+        menu.addAction(QStringLiteral("Paste result = %1").arg(text), [this, text] {
+            hide();
+            if (m_monitor)
+                m_monitor->ignoreNextChange();
+            QApplication::clipboard()->setText(text);
+            QTimer::singleShot(80, [] { platform::simulatePaste(); });
+        });
+        added = true;
+    }
+
+    if (added)
+        menu.addSeparator();
+}
+
+void OverlayWindow::runPrimarySmartAction() {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    if (e->type == ContentType::Url) {
+        const QString url = e->content.trimmed();
+        hide();
+        QDesktopServices::openUrl(QUrl::fromUserInput(url));
+    } else if (e->type == ContentType::FilePath) {
+        const QString path = e->content.trimmed();
+        hide();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    }
+}
+
+void OverlayWindow::copyRawText(const QString& text) {
+    if (m_monitor)
+        m_monitor->ignoreNextChange();
+    QApplication::clipboard()->setText(text);
+}
+
+void OverlayWindow::newSnippet() {
+    bool ok = false;
+    const QString text = QInputDialog::getMultiLineText(
+        this, QStringLiteral("New snippet"),
+        QStringLiteral("Reusable text (saved pinned):"), QString(), &ok);
+    if (ok && !text.trimmed().isEmpty()) {
+        ClipEntry e;
+        e.content = text;
+        e.sourceApp = QStringLiteral("Snippet");
+        e.type = ContentClassifier::classify(text);
+        const qint64 id = m_db->insertEntry(e);
+        if (id > 0)
+            m_db->togglePin(id);
+        m_search->clear();
+        reload();
+        selectRow(0);
+    }
+    activateWindow();
+    m_search->setFocus();
 }
 
 void OverlayWindow::openSettings() {
@@ -357,6 +471,11 @@ bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
                 pasteCurrent();
             }
             return true;
+        }
+
+        if (mods & Qt::ControlModifier) {
+            if (key == Qt::Key_O) { runPrimarySmartAction(); return true; } // open url/file
+            if (key == Qt::Key_N) { newSnippet(); return true; }           // new snippet
         }
 
         switch (key) {

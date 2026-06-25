@@ -6,6 +6,7 @@
 
 #include <QApplication>
 #include <QDateTime>
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
@@ -179,7 +180,9 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
         ? QStringLiteral("•••••  sensitive — hidden")
         : e.content.simplified();
 
-    QFont titleFont = option.font;
+    QFont titleFont = (e.type == ContentType::Code)
+                          ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
+                          : option.font;
     titleFont.setPixelSize(Theme::FsBody);
     painter->setFont(titleFont);
     painter->setPen(QColor(e.sensitive ? Theme::TextMuted : Theme::TextPrimary));

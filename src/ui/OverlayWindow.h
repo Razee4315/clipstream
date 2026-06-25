@@ -48,8 +48,12 @@ private:
     void showFormatMenu();
     void showContextMenu(const QPoint& globalPos);
     void openSettings();
+    void newSnippet();
+    void runPrimarySmartAction();
+    void addSmartActions(QMenu& menu, const ClipEntry& entry);
 
     void putOnClipboard(const ClipEntry& entry, PasteFormat format);
+    void copyRawText(const QString& text);
 
     Database* m_db = nullptr;
     ClipboardMonitor* m_monitor = nullptr;
