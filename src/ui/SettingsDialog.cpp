@@ -27,9 +27,9 @@ QString buildStyleSheet() {
         "QDialog { background:@bg; }"
         "QLabel { color:@text; }"
         "QGroupBox { color:@muted; border:1px solid @border; border-radius:@rmd px;"
-        "  margin-top:16px; padding:14px 12px 12px 12px; font-weight:600; }"
+        "  margin-top:11px; padding:10px 10px 8px 10px; font-weight:600; }"
         "QGroupBox::title { subcontrol-origin:margin; subcontrol-position:top left;"
-        "  left:12px; padding:0 6px; }"
+        "  left:10px; padding:0 5px; }"
         "QLineEdit, QSpinBox, QComboBox { background:@surface; color:@text;"
         "  border:1px solid @border; border-radius:8px; padding:5px 8px; min-height:20px; }"
         "QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border:1px solid @accent; }"
@@ -60,7 +60,7 @@ QString buildStyleSheet() {
 SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     : QDialog(parent), m_db(db) {
     setWindowTitle(QStringLiteral("ClipStream Settings"));
-    setMinimumWidth(440);
+    setMinimumWidth(380);
     setStyleSheet(buildStyleSheet());
     buildUi();
     loadIgnoredApps();
@@ -68,17 +68,17 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
 
 void SettingsDialog::buildUi() {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(Theme::S5, Theme::S5, Theme::S5, Theme::S5);
-    root->setSpacing(Theme::S4);
+    root->setContentsMargins(Theme::S4, Theme::S4, Theme::S4, Theme::S4);
+    root->setSpacing(Theme::S3);
 
     // --- Header ---------------------------------------------------------------
     auto* header = new QHBoxLayout();
     header->setSpacing(Theme::S2);
     auto* headerIcon = new QLabel(this);
     headerIcon->setPixmap(IconFactory::pixmap(QStringLiteral("settings"),
-                                              QColor(Theme::palette().textPrimary), 20));
+                                              QColor(Theme::palette().textPrimary), 18));
     auto* headerTitle = new QLabel(QStringLiteral("Settings"), this);
-    headerTitle->setStyleSheet(QStringLiteral("font-size:18px; font-weight:700;"));
+    headerTitle->setStyleSheet(QStringLiteral("font-size:16px; font-weight:700;"));
     header->addWidget(headerIcon);
     header->addWidget(headerTitle);
     header->addStretch();
@@ -111,7 +111,7 @@ void SettingsDialog::buildUi() {
     auto* captureBox = new QGroupBox(QStringLiteral("Capture"), this);
     auto* captureForm = new QFormLayout(captureBox);
 
-    m_pauseCapture = new QCheckBox(QStringLiteral("Pause clipboard capture"), captureBox);
+    m_pauseCapture = new QCheckBox(QStringLiteral("Pause capturing"), captureBox);
     m_pauseCapture->setChecked(m_db->setting(QStringLiteral("paused")) == QLatin1String("1"));
     connect(m_pauseCapture, &QCheckBox::toggled, this, [this](bool on) {
         m_db->setSetting(QStringLiteral("paused"), on ? QStringLiteral("1") : QStringLiteral("0"));
@@ -119,14 +119,14 @@ void SettingsDialog::buildUi() {
     });
     captureForm->addRow(m_pauseCapture);
 
-    m_launchAtStartup = new QCheckBox(QStringLiteral("Launch ClipStream at login"), captureBox);
+    m_launchAtStartup = new QCheckBox(QStringLiteral("Start with Windows"), captureBox);
     m_launchAtStartup->setChecked(platform::isLaunchAtStartupEnabled());
     connect(m_launchAtStartup, &QCheckBox::toggled, this,
             [](bool on) { platform::setLaunchAtStartup(on); });
     captureForm->addRow(m_launchAtStartup);
 
     m_discardSensitive = new QCheckBox(
-        QStringLiteral("Never store passwords / secrets"), captureBox);
+        QStringLiteral("Don't save passwords or secrets"), captureBox);
     m_discardSensitive->setToolTip(
         QStringLiteral("Clips that look like passwords, card numbers or API keys are dropped, not saved."));
     m_discardSensitive->setChecked(m_db->setting(QStringLiteral("discard_sensitive")) == QLatin1String("1"));
@@ -150,7 +150,7 @@ void SettingsDialog::buildUi() {
         m_db->setSetting(QStringLiteral("max_entries"), QString::number(v));
         emit settingsChanged();
     });
-    historyForm->addRow(QStringLiteral("Max items kept"), m_maxEntries);
+    historyForm->addRow(QStringLiteral("Keep up to"), m_maxEntries);
 
     m_retentionDays = new QSpinBox(historyBox);
     m_retentionDays->setRange(1, 3650);
@@ -159,7 +159,7 @@ void SettingsDialog::buildUi() {
         m_db->setSetting(QStringLiteral("retention_days"), QString::number(v));
         emit settingsChanged();
     });
-    historyForm->addRow(QStringLiteral("Delete after (days)"), m_retentionDays);
+    historyForm->addRow(QStringLiteral("Forget after (days)"), m_retentionDays);
 
     root->addWidget(historyBox);
 
@@ -181,7 +181,7 @@ void SettingsDialog::buildUi() {
     ignoreLayout->addLayout(addRow);
 
     m_appList = new QListWidget(ignoreBox);
-    m_appList->setMaximumHeight(120);
+    m_appList->setMaximumHeight(88);
     ignoreLayout->addWidget(m_appList);
 
     auto* removeBtn = new QPushButton(QStringLiteral(" Remove selected"), ignoreBox);

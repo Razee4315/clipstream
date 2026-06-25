@@ -150,6 +150,11 @@ void OverlayWindow::buildUi() {
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
     connect(m_list, &QListView::customContextMenuRequested, this,
             [this](const QPoint& pos) { showContextMenu(m_list->viewport()->mapToGlobal(pos)); });
+    // Hovering a row selects it, so the action buttons appear on hover.
+    connect(m_list, &QListView::entered, this, [this](const QModelIndex& idx) {
+        if (idx.isValid())
+            m_list->setCurrentIndex(idx);
+    });
 
     // Floating action bar over the selected row (pin/copy/edit/delete).
     m_actions = new RowActionsBar(m_list->viewport());
@@ -165,8 +170,7 @@ void OverlayWindow::buildUi() {
 
     // --- Footer hints ---------------------------------------------------------
     auto* footer = new QLabel(
-        QStringLiteral("↵ Paste   ⇧↵ Format   ^O Open   ^N Snippet   F2 Edit   ⇧⌦ Delete   Esc"),
-        m_card);
+        QStringLiteral("↑↓ Move     ⏎ Paste     Ctrl+N New     Esc Close"), m_card);
     footer->setObjectName(QStringLiteral("footer"));
     footer->setAlignment(Qt::AlignCenter);
     col->addWidget(footer);

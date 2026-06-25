@@ -5,6 +5,7 @@
 #include <QString>
 
 class QClipboard;
+class QTimer;
 
 // Watches the system clipboard and emits a signal whenever new content appears.
 // Event-driven via QClipboard::dataChanged — no polling, ~0% idle CPU (the key
@@ -27,10 +28,17 @@ signals:
 
 private:
     void handleChange();
+    void flushPendingImage();
 
     QClipboard* m_clipboard = nullptr;
     bool m_paused = false;
     bool m_ignoreNext = false;
     QString m_lastText;
     quint64 m_lastImageHash = 0; // dedups repeated dataChanged for one image
+
+    // Screenshot tools often post an image as a short burst of clipboard
+    // updates; we debounce so the burst becomes a single captured entry.
+    QTimer* m_imageDebounce = nullptr;
+    QImage m_pendingImage;
+    QString m_pendingSource;
 };

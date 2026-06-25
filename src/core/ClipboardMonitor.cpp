@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QMimeData>
+#include <QTimer>
 
 namespace {
 
@@ -31,6 +32,26 @@ quint64 imageHash(const QImage& img) {
 ClipboardMonitor::ClipboardMonitor(QObject* parent) : QObject(parent) {
     m_clipboard = QApplication::clipboard();
     connect(m_clipboard, &QClipboard::dataChanged, this, &ClipboardMonitor::handleChange);
+
+    m_imageDebounce = new QTimer(this);
+    m_imageDebounce->setSingleShot(true);
+    m_imageDebounce->setInterval(220);
+    connect(m_imageDebounce, &QTimer::timeout, this, &ClipboardMonitor::flushPendingImage);
+}
+
+void ClipboardMonitor::flushPendingImage() {
+    if (m_pendingImage.isNull())
+        return;
+    const quint64 hash = imageHash(m_pendingImage);
+    const QImage image = m_pendingImage;
+    const QString source = m_pendingSource;
+    m_pendingImage = QImage();
+    m_pendingSource.clear();
+    if (hash == m_lastImageHash)
+        return; // identical to the previous capture
+    m_lastImageHash = hash;
+    m_lastText.clear();
+    emit imageCaptured(image, source);
 }
 
 void ClipboardMonitor::handleChange() {
@@ -51,12 +72,12 @@ void ClipboardMonitor::handleChange() {
     if (mime->hasImage()) {
         const QImage image = qvariant_cast<QImage>(mime->imageData());
         if (!image.isNull()) {
-            const quint64 hash = imageHash(image);
-            if (hash == m_lastImageHash)
-                return; // same image, repeated signal — ignore
-            m_lastImageHash = hash;
-            m_lastText.clear();
-            emit imageCaptured(image, sourceApp);
+            // Stash the latest image and (re)arm the debounce — a burst of
+            // updates for one screenshot collapses into a single capture.
+            m_pendingImage = image;
+            if (m_pendingSource.isEmpty())
+                m_pendingSource = sourceApp;
+            m_imageDebounce->start();
             return;
         }
     }
