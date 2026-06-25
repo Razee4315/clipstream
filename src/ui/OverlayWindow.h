@@ -1,16 +1,18 @@
 #pragma once
 
 #include "core/ClipEntry.h"
-#include "ui/EntryDelegate.h"
 
 #include <QWidget>
 
 class Database;
 class ClipboardMonitor;
 class HistoryModel;
+class EntryDelegate;
+class RowActionsBar;
 class QLineEdit;
 class QListView;
 class QLabel;
+class QToolButton;
 class QModelIndex;
 class QPropertyAnimation;
 
@@ -49,7 +51,7 @@ private:
     void deleteCurrent();
     void showFormatMenu();
     void showContextMenu(const QPoint& globalPos);
-    void onRowAction(const QModelIndex& index, EntryDelegate::Action action);
+    void positionActionsBar();
     void openSettings();
     void newSnippet();
     void runPrimarySmartAction();
@@ -63,9 +65,12 @@ private:
 
     QWidget* m_card = nullptr;
     QLineEdit* m_search = nullptr;
+    QLabel* m_searchIcon = nullptr;
+    QToolButton* m_settingsBtn = nullptr;
     QLabel* m_count = nullptr;
     QListView* m_list = nullptr;
     HistoryModel* m_model = nullptr;
     EntryDelegate* m_delegate = nullptr;
+    RowActionsBar* m_actions = nullptr;
     QPropertyAnimation* m_fade = nullptr;
 };

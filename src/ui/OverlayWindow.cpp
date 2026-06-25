@@ -8,6 +8,8 @@
 #include "theme.h"
 #include "ui/EntryDelegate.h"
 #include "ui/HistoryModel.h"
+#include "ui/IconFactory.h"
+#include "ui/RowActionsBar.h"
 #include "ui/SettingsDialog.h"
 
 #include <QApplication>
@@ -21,18 +23,20 @@
 #include <QGraphicsDropShadowEffect>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QEasingCurve>
 #include <QInputDialog>
+#include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
-#include <QEasingCurve>
 #include <QMenu>
 #include <QProcess>
 #include <QPropertyAnimation>
-#include <QPushButton>
 #include <QScreen>
+#include <QScrollBar>
 #include <QTimer>
+#include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -96,6 +100,10 @@ void OverlayWindow::buildUi() {
     auto* searchRow = new QHBoxLayout();
     searchRow->setSpacing(Theme::S2);
 
+    m_searchIcon = new QLabel(m_card);
+    m_searchIcon->setFixedSize(18, 18);
+    searchRow->addWidget(m_searchIcon);
+
     m_search = new QLineEdit(m_card);
     m_search->setObjectName(QStringLiteral("search"));
     m_search->setPlaceholderText(QStringLiteral("Search clipboard…"));
@@ -107,12 +115,15 @@ void OverlayWindow::buildUi() {
     m_count->setObjectName(QStringLiteral("count"));
     searchRow->addWidget(m_count);
 
-    auto* settingsBtn = new QPushButton(QStringLiteral("⚙"), m_card);
-    settingsBtn->setObjectName(QStringLiteral("iconBtn"));
-    settingsBtn->setCursor(Qt::PointingHandCursor);
-    settingsBtn->setFixedSize(28, 28);
-    connect(settingsBtn, &QPushButton::clicked, this, &OverlayWindow::openSettings);
-    searchRow->addWidget(settingsBtn);
+    m_settingsBtn = new QToolButton(m_card);
+    m_settingsBtn->setObjectName(QStringLiteral("iconBtn"));
+    m_settingsBtn->setCursor(Qt::PointingHandCursor);
+    m_settingsBtn->setFocusPolicy(Qt::NoFocus);
+    m_settingsBtn->setFixedSize(28, 28);
+    m_settingsBtn->setIconSize(QSize(16, 16));
+    m_settingsBtn->setToolTip(QStringLiteral("Settings"));
+    connect(m_settingsBtn, &QToolButton::clicked, this, &OverlayWindow::openSettings);
+    searchRow->addWidget(m_settingsBtn);
 
     col->addLayout(searchRow);
 
@@ -139,7 +150,18 @@ void OverlayWindow::buildUi() {
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
     connect(m_list, &QListView::customContextMenuRequested, this,
             [this](const QPoint& pos) { showContextMenu(m_list->viewport()->mapToGlobal(pos)); });
-    connect(m_delegate, &EntryDelegate::actionClicked, this, &OverlayWindow::onRowAction);
+
+    // Floating action bar over the selected row (pin/copy/edit/delete).
+    m_actions = new RowActionsBar(m_list->viewport());
+    m_actions->hide();
+    connect(m_actions, &RowActionsBar::pinClicked, this, [this] { pinCurrent(); });
+    connect(m_actions, &RowActionsBar::copyClicked, this, [this] { copyCurrent(); });
+    connect(m_actions, &RowActionsBar::editClicked, this, [this] { editCurrent(); });
+    connect(m_actions, &RowActionsBar::deleteClicked, this, [this] { deleteCurrent(); });
+    connect(m_list->selectionModel(), &QItemSelectionModel::currentChanged, this,
+            [this] { positionActionsBar(); });
+    connect(m_list->verticalScrollBar(), &QScrollBar::valueChanged, this,
+            [this] { positionActionsBar(); });
 
     // --- Footer hints ---------------------------------------------------------
     auto* footer = new QLabel(
@@ -191,6 +213,14 @@ void OverlayWindow::applyTheme() {
             .arg(p.textMuted)     // 9
             .arg(Theme::FsMeta)   // 10
             .arg(Theme::FsMicro));// 11
+
+    // Themed icons (recoloured per palette).
+    if (m_searchIcon)
+        m_searchIcon->setPixmap(IconFactory::pixmap(QStringLiteral("search"), QColor(p.textMuted), 16));
+    if (m_settingsBtn)
+        m_settingsBtn->setIcon(IconFactory::icon(QStringLiteral("settings"), QColor(p.textMuted), 16));
+    if (m_actions)
+        m_actions->retheme();
 }
 
 void OverlayWindow::reload() {
@@ -199,6 +229,9 @@ void OverlayWindow::reload() {
     m_count->setText(QString::number(m_model->rowCount()));
     if (m_model->rowCount() > 0)
         selectRow(qBound(0, keepRow < 0 ? 0 : keepRow, m_model->rowCount() - 1));
+    else
+        m_actions->hide();
+    positionActionsBar();
 }
 
 void OverlayWindow::selectRow(int row) {
@@ -294,7 +327,9 @@ void OverlayWindow::copyCurrent() {
     if (!e)
         return;
     putOnClipboard(*e, PasteFormat::Plain);
-    hide();
+    // Stay open and confirm visually instead of hiding, so the copy feels acknowledged.
+    if (m_actions && m_actions->isVisible())
+        m_actions->flashCopied();
 }
 
 void OverlayWindow::pinCurrent() {
@@ -463,16 +498,24 @@ void OverlayWindow::newSnippet() {
     m_search->setFocus();
 }
 
-void OverlayWindow::onRowAction(const QModelIndex& index, EntryDelegate::Action action) {
-    if (!index.isValid())
+void OverlayWindow::positionActionsBar() {
+    const ClipEntry* e = currentEntry();
+    const QModelIndex idx = m_list->currentIndex();
+    const QRect rect = idx.isValid() ? m_list->visualRect(idx) : QRect();
+    // Hide when there's no selection or the row is scrolled out of view.
+    if (!e || rect.isEmpty() || rect.bottom() <= 0 || rect.top() >= m_list->viewport()->height()) {
+        m_actions->hide();
         return;
-    m_list->setCurrentIndex(index); // operate on the clicked row
-    switch (action) {
-        case EntryDelegate::Action::Pin:    pinCurrent();    break;
-        case EntryDelegate::Action::Copy:   copyCurrent();   break;
-        case EntryDelegate::Action::Edit:   editCurrent();   break;
-        case EntryDelegate::Action::Delete: deleteCurrent(); break;
     }
+
+    m_actions->configure(e->pinned, !e->isImage());
+    const int barW = m_actions->widthFor(!e->isImage());
+    const int barH = 34;
+    const int x = rect.right() - Theme::S2 - barW;
+    const int y = rect.top() + (rect.height() - barH) / 2;
+    m_actions->setGeometry(x, y, barW, barH);
+    m_actions->show();
+    m_actions->raise();
 }
 
 void OverlayWindow::openSettings() {

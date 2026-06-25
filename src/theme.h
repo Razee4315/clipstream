@@ -27,6 +27,7 @@ constexpr int ShadowMargin  = 24; // transparent gutter so the drop shadow shows
 // ---- List rows --------------------------------------------------------------
 constexpr int RowHeight = 56;
 constexpr int BadgeSize = 34;
+constexpr int ActionsReserve = 142; // right-side gutter kept clear for the action bar
 
 // ---- Colour palette (switchable, named) -------------------------------------
 struct Palette {

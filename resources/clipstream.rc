@@ -1,1 +1,2 @@
+// Windows executable icon (Explorer/taskbar). See QT-AGENT-GUIDE.md §3.
 IDI_ICON1 ICON "icon.ico"

@@ -4,22 +4,16 @@
 #include "theme.h"
 #include "ui/HistoryModel.h"
 
-#include <QAbstractItemModel>
 #include <QApplication>
 #include <QDateTime>
-#include <QEvent>
 #include <QFontDatabase>
 #include <QFontMetrics>
-#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPixmapCache>
 
 namespace {
-
-constexpr int kButton = 26; // inline action button size
-constexpr int kGap = 2;
 
 QColor badgeColor(ContentType type) {
     switch (type) {
@@ -114,94 +108,12 @@ void drawGlyph(QPainter* p, const QRectF& r, ContentType type, const QString& co
     p->restore();
 }
 
-// Draw one inline action button (background chip + icon).
-void drawActionButton(QPainter* p, const QRect& rect, EntryDelegate::Action action,
-                      bool pinned, const Theme::Palette& pal, bool dark) {
-    p->save();
-    p->setRenderHint(QPainter::Antialiasing, true);
-
-    // chip background
-    p->setPen(Qt::NoPen);
-    p->setBrush(dark ? QColor(255, 255, 255, 22) : QColor(0, 0, 0, 16));
-    p->drawRoundedRect(rect, 7, 7);
-
-    const QRectF g = QRectF(rect).adjusted(7, 7, -7, -7);
-    const qreal cx = g.center().x();
-    QColor ink(pal.textPrimary);
-    QPen pen(ink);
-    pen.setWidthF(1.5);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-
-    switch (action) {
-        case EntryDelegate::Action::Pin: {
-            const QColor pinCol = pinned ? QColor(pal.accent) : QColor(pal.textMuted);
-            pen.setColor(pinCol);
-            p->setPen(pen);
-            p->setBrush(pinned ? pinCol : QBrush(Qt::NoBrush));
-            p->drawEllipse(QPointF(cx, g.top() + 4), 3.2, 3.2);
-            p->setBrush(Qt::NoBrush);
-            p->drawLine(QPointF(cx, g.top() + 7), QPointF(cx, g.bottom()));
-            break;
-        }
-        case EntryDelegate::Action::Copy: {
-            p->setPen(pen);
-            p->setBrush(Qt::NoBrush);
-            QRectF back(g.left() + 3, g.top(), g.width() - 4, g.height() - 4);
-            QRectF front(g.left(), g.top() + 3, g.width() - 4, g.height() - 3);
-            p->drawRoundedRect(back, 2, 2);
-            p->setBrush(dark ? QColor(255, 255, 255, 22) : QColor(0, 0, 0, 16));
-            p->drawRoundedRect(front, 2, 2);
-            break;
-        }
-        case EntryDelegate::Action::Edit: {
-            p->setPen(pen);
-            p->drawLine(QPointF(g.left() + 1, g.bottom() - 1), QPointF(g.right() - 2, g.top() + 2));
-            p->drawLine(QPointF(g.left() + 1, g.bottom() - 1), QPointF(g.left() + 1, g.bottom() - 4));
-            p->drawLine(QPointF(g.left() + 1, g.bottom() - 1), QPointF(g.left() + 4, g.bottom() - 1));
-            break;
-        }
-        case EntryDelegate::Action::Delete: {
-            pen.setColor(QColor(0xef, 0x44, 0x44));
-            p->setPen(pen);
-            p->setBrush(Qt::NoBrush);
-            p->drawLine(QPointF(g.left(), g.top() + 3), QPointF(g.right(), g.top() + 3)); // lid
-            p->drawLine(QPointF(cx - 2.5, g.top()), QPointF(cx + 2.5, g.top()));          // handle
-            QRectF body(g.left() + 1.5, g.top() + 3, g.width() - 3, g.height() - 3);
-            p->drawRoundedRect(body, 1.5, 1.5);
-            break;
-        }
-    }
-    p->restore();
-}
-
 } // namespace
 
 EntryDelegate::EntryDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
 
 QSize EntryDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const {
     return QSize(option.rect.width(), Theme::RowHeight);
-}
-
-QVector<EntryDelegate::ActionButton> EntryDelegate::actionButtons(const QRect& rowRect,
-                                                                  bool isImage) const {
-    QVector<Action> actions{Action::Pin, Action::Copy};
-    if (!isImage)
-        actions << Action::Edit;
-    actions << Action::Delete;
-
-    const int n = actions.size();
-    const int totalW = n * kButton + (n - 1) * kGap;
-    int x = rowRect.right() - Theme::S2 - totalW;
-    const int y = rowRect.center().y() - kButton / 2;
-
-    QVector<ActionButton> out;
-    out.reserve(n);
-    for (Action a : actions) {
-        out.append({a, QRect(x, y, kButton, kButton)});
-        x += kButton + kGap;
-    }
-    return out;
 }
 
 void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -213,7 +125,6 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     }
     const ClipEntry& e = model->entryAt(index.row());
     const Theme::Palette& pal = Theme::palette();
-    const bool dark = Theme::isDark();
 
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
@@ -221,7 +132,6 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const QRect full = option.rect.adjusted(Theme::S2, 2, -Theme::S2, -2);
     const bool selected = option.state & QStyle::State_Selected;
     const bool hovered = option.state & QStyle::State_MouseOver;
-    const bool showButtons = selected || hovered;
 
     if (selected || hovered) {
         painter->setPen(Qt::NoPen);
@@ -263,10 +173,8 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
         drawGlyph(painter, badgeRect, e.type, e.content);
     }
 
-    // Reserve the button strip on the right at all times so text never reflows.
-    const auto buttons = actionButtons(full, e.isImage());
-    const int rightLimit = buttons.first().rect.left() - Theme::S2;
-
+    // Keep a fixed gutter clear on the right for the floating action bar.
+    const int rightLimit = full.right() - Theme::ActionsReserve;
     const int textLeft = badgeRect.right() + Theme::S3;
     const QRect textArea(textLeft, full.top(), rightLimit - textLeft, full.height());
 
@@ -294,37 +202,12 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 7, textArea.width(), mfm.height()),
                       Qt::AlignLeft | Qt::AlignVCenter, mfm.elidedText(meta, Qt::ElideRight, textArea.width()));
 
-    if (showButtons) {
-        for (const ActionButton& b : buttons)
-            drawActionButton(painter, b.rect, b.action, e.pinned, pal, dark);
-    } else if (e.pinned) {
-        // Compact pinned marker when the buttons aren't shown.
+    // Pinned marker (the action bar covers this area only on the selected row).
+    if (e.pinned && !selected) {
         painter->setPen(Qt::NoPen);
         painter->setBrush(QColor(pal.accent));
         painter->drawEllipse(QPoint(full.right() - Theme::S2 - 2, full.center().y()), 3, 3);
     }
 
     painter->restore();
-}
-
-bool EntryDelegate::editorEvent(QEvent* event, QAbstractItemModel* /*model*/,
-                                const QStyleOptionViewItem& option, const QModelIndex& index) {
-    if (event->type() != QEvent::MouseButtonRelease)
-        return false;
-
-    const auto* histModel = qobject_cast<const HistoryModel*>(index.model());
-    if (!histModel || !histModel->isValidRow(index.row()))
-        return false;
-
-    const bool isImage = histModel->entryAt(index.row()).isImage();
-    const QRect full = option.rect.adjusted(Theme::S2, 2, -Theme::S2, -2);
-    const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
-
-    for (const ActionButton& b : actionButtons(full, isImage)) {
-        if (b.rect.contains(pos)) {
-            emit actionClicked(index, b.action);
-            return true; // consume — don't trigger row activation/paste
-        }
-    }
-    return false;
 }

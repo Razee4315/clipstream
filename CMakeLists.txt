@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Svg)
 
 # --- Platform-specific implementations (swapped at build time) -----------------
 # The headers in src/platform/ define the contract; the .cpp picked here is the
@@ -57,6 +57,10 @@ set(SOURCES
     src/ui/EntryDelegate.h
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.h
+    src/ui/IconFactory.cpp
+    src/ui/IconFactory.h
+    src/ui/RowActionsBar.cpp
+    src/ui/RowActionsBar.h
     # Listed so AUTOMOC processes the Q_OBJECT header whose impl lives in a
     # differently-named platform .cpp (HotkeyManager_win.cpp / _stub.cpp).
     src/platform/HotkeyManager.h
@@ -71,7 +75,7 @@ target_include_directories(ClipStream PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/resources"  # lets windres find icon.ico (see guide)
 )
 
-target_link_libraries(ClipStream PRIVATE Qt6::Widgets Qt6::Sql)
+target_link_libraries(ClipStream PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg)
 
 if(WIN32)
     # APIs we call directly: RegisterHotKey/SendInput/GetForegroundWindow (user32),
