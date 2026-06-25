@@ -1,6 +1,7 @@
 # Build output
 /build/
 /dist/
+/installer/output/
 *.exe
 
 # CMake

@@ -1,0 +1,72 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed for the release step on tags
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # aqtinstall (used by this action) doesn't carry Qt 6.11 yet, so CI pins to
+      # the 6.8 LTS. Standard Qt 6 Widgets/Sql code builds identically across them.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: ''
+          tools: 'tools_mingw1310'
+          cache: true
+
+      - name: Add MinGW to PATH
+        shell: pwsh
+        run: '"$env:IQTA_TOOLS\mingw1310_64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append'
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G "MinGW Makefiles"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build
+
+      - name: Deploy (bundle Qt runtime)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\ClipStream | Out-Null
+          Copy-Item build\ClipStream.exe dist\ClipStream\
+          windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw dist\ClipStream\ClipStream.exe
+          Remove-Item dist\ClipStream\dxcompiler.dll,dist\ClipStream\dxil.dll -ErrorAction SilentlyContinue
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ClipStream.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipStream-Setup
+          path: installer/output/*.exe
+
+      - name: Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/output/*.exe
