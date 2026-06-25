@@ -26,5 +26,10 @@ int main(int argc, char* argv[]) {
     }
 
     AppController controller;
+    if (!controller.initialize()) {
+        QMessageBox::critical(nullptr, QStringLiteral("ClipStream"),
+                              QStringLiteral("Failed to initialise the clipboard database."));
+        return 1;
+    }
     return app.exec();
 }

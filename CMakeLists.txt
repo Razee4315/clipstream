@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
 
 # --- Platform-specific implementations (swapped at build time) -----------------
 # The headers in src/platform/ define the contract; the .cpp picked here is the
@@ -20,6 +20,7 @@ if(WIN32)
         src/platform/win/HotkeyManager_win.cpp
         src/platform/win/ForegroundApp_win.cpp
         src/platform/win/PasteSimulator_win.cpp
+        src/platform/win/Autostart_win.cpp
         resources/clipstream.rc
     )
 else()
@@ -27,6 +28,7 @@ else()
         src/platform/stub/HotkeyManager_stub.cpp
         src/platform/stub/ForegroundApp_stub.cpp
         src/platform/stub/PasteSimulator_stub.cpp
+        src/platform/stub/Autostart_stub.cpp
     )
 endif()
 
@@ -34,8 +36,22 @@ set(SOURCES
     src/main.cpp
     src/AppController.cpp
     src/AppController.h
+    # core
+    src/core/Database.cpp
+    src/core/Database.h
+    src/core/ClipboardMonitor.cpp
+    src/core/ClipboardMonitor.h
+    src/core/ContentClassifier.cpp
+    src/core/ClipEntry.h
+    # ui
     src/ui/OverlayWindow.cpp
     src/ui/OverlayWindow.h
+    src/ui/HistoryModel.cpp
+    src/ui/HistoryModel.h
+    src/ui/EntryDelegate.cpp
+    src/ui/EntryDelegate.h
+    src/ui/SettingsDialog.cpp
+    src/ui/SettingsDialog.h
     # Listed so AUTOMOC processes the Q_OBJECT header whose impl lives in a
     # differently-named platform .cpp (HotkeyManager_win.cpp / _stub.cpp).
     src/platform/HotkeyManager.h
@@ -50,7 +66,7 @@ target_include_directories(ClipStream PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/resources"  # lets windres find icon.ico (see guide)
 )
 
-target_link_libraries(ClipStream PRIVATE Qt6::Widgets)
+target_link_libraries(ClipStream PRIVATE Qt6::Widgets Qt6::Sql)
 
 if(WIN32)
     # APIs we call directly: RegisterHotKey/SendInput/GetForegroundWindow (user32),

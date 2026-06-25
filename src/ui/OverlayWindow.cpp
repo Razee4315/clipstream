@@ -1,26 +1,59 @@
 #include "ui/OverlayWindow.h"
-#include "theme.h"
 
+#include "core/ClipboardMonitor.h"
+#include "core/Database.h"
+#include "platform/PasteSimulator.h"
+#include "theme.h"
+#include "ui/EntryDelegate.h"
+#include "ui/HistoryModel.h"
+#include "ui/SettingsDialog.h"
+
+#include <QApplication>
+#include <QClipboard>
 #include <QCursor>
 #include <QEvent>
+#include <QFile>
 #include <QGraphicsDropShadowEffect>
 #include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListView>
+#include <QMenu>
+#include <QPushButton>
 #include <QScreen>
+#include <QTimer>
 #include <QVBoxLayout>
 
-OverlayWindow::OverlayWindow(QWidget* parent) : QWidget(parent) {
+namespace {
+
+QString toTitleCase(const QString& s) {
+    QString out = s.toLower();
+    bool atStart = true;
+    for (QChar& c : out) {
+        if (atStart && c.isLetter()) {
+            c = c.toUpper();
+            atStart = false;
+        } else if (c.isSpace()) {
+            atStart = true;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+OverlayWindow::OverlayWindow(Database* db, ClipboardMonitor* monitor, QWidget* parent)
+    : QWidget(parent), m_db(db), m_monitor(monitor) {
     setWindowTitle(QStringLiteral("ClipStream"));
-    // Tool window so it stays out of the taskbar; frameless + on-top + translucent
-    // gives the rounded floating-card look.
     setWindowFlags(Qt::FramelessWindowHint | Qt::Tool | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
     buildUi();
 }
 
 void OverlayWindow::buildUi() {
-    // Outer layout reserves a transparent gutter so the card's drop shadow shows.
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(Theme::ShadowMargin, Theme::ShadowMargin,
                               Theme::ShadowMargin, Theme::ShadowMargin);
@@ -32,47 +65,135 @@ void OverlayWindow::buildUi() {
     auto* shadow = new QGraphicsDropShadowEffect(m_card);
     shadow->setBlurRadius(40);
     shadow->setOffset(0, 8);
-    shadow->setColor(QColor(0, 0, 0, 160));
+    shadow->setColor(QColor(0, 0, 0, 170));
     m_card->setGraphicsEffect(shadow);
 
-    auto* inner = new QVBoxLayout(m_card);
-    inner->setContentsMargins(Theme::S5, Theme::S5, Theme::S5, Theme::S5);
-    inner->setSpacing(Theme::S3);
+    auto* col = new QVBoxLayout(m_card);
+    col->setContentsMargins(Theme::S3, Theme::S3, Theme::S3, Theme::S2);
+    col->setSpacing(Theme::S2);
 
-    auto* title = new QLabel(QStringLiteral("ClipStream"), m_card);
-    title->setObjectName(QStringLiteral("title"));
+    // --- Search row -----------------------------------------------------------
+    auto* searchRow = new QHBoxLayout();
+    searchRow->setSpacing(Theme::S2);
 
-    auto* hint = new QLabel(
-        QStringLiteral("Phase 0 — the overlay is alive.\n\n"
-                       "Ctrl+Shift+V toggles it. Esc closes it.\n"
-                       "History, search and paste land next."),
+    m_search = new QLineEdit(m_card);
+    m_search->setObjectName(QStringLiteral("search"));
+    m_search->setPlaceholderText(QStringLiteral("Search clipboard…"));
+    m_search->setClearButtonEnabled(true);
+    m_search->installEventFilter(this);
+    searchRow->addWidget(m_search, 1);
+
+    m_count = new QLabel(QStringLiteral("0"), m_card);
+    m_count->setObjectName(QStringLiteral("count"));
+    searchRow->addWidget(m_count);
+
+    auto* settingsBtn = new QPushButton(QStringLiteral("⚙"), m_card);
+    settingsBtn->setObjectName(QStringLiteral("iconBtn"));
+    settingsBtn->setCursor(Qt::PointingHandCursor);
+    settingsBtn->setFixedSize(28, 28);
+    connect(settingsBtn, &QPushButton::clicked, this, &OverlayWindow::openSettings);
+    searchRow->addWidget(settingsBtn);
+
+    col->addLayout(searchRow);
+
+    // --- History list ---------------------------------------------------------
+    m_model = new HistoryModel(this);
+    m_delegate = new EntryDelegate(this);
+    m_list = new QListView(m_card);
+    m_list->setObjectName(QStringLiteral("list"));
+    m_list->setModel(m_model);
+    m_list->setItemDelegate(m_delegate);
+    m_list->setFrameShape(QFrame::NoFrame);
+    m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_list->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_list->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_list->setUniformItemSizes(true);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_list->setMouseTracking(true);
+    m_list->installEventFilter(this);
+    col->addWidget(m_list, 1);
+
+    connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
+    connect(m_list, &QListView::customContextMenuRequested, this,
+            [this](const QPoint& pos) { showContextMenu(m_list->viewport()->mapToGlobal(pos)); });
+
+    // --- Footer hints ---------------------------------------------------------
+    auto* footer = new QLabel(
+        QStringLiteral("↑↓ Navigate   ↵ Paste   ⇧↵ Format   F2 Edit   ⇧⌦ Delete   Esc Close"),
         m_card);
-    hint->setObjectName(QStringLiteral("hint"));
-    hint->setWordWrap(true);
+    footer->setObjectName(QStringLiteral("footer"));
+    footer->setAlignment(Qt::AlignCenter);
+    col->addWidget(footer);
 
-    inner->addWidget(title);
-    inner->addWidget(hint);
-    inner->addStretch();
+    connect(m_search, &QLineEdit::textChanged, this, [this] { reload(); });
 
     setFixedSize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
                  Theme::OverlayHeight + 2 * Theme::ShadowMargin);
 
-    // Styling is driven entirely by theme.h tokens (single source of truth).
     setStyleSheet(
         QStringLiteral(
-            "#card { background-color: %1; border: 1px solid %2; border-radius: %3px; }"
-            "#title { color: %4; font-size: %5px; font-weight: 700; }"
-            "#hint  { color: %6; font-size: %7px; }")
-            .arg(QString::fromUtf8(Theme::Surface))
-            .arg(QString::fromUtf8(Theme::Border))
-            .arg(Theme::RadiusLg)
-            .arg(QString::fromUtf8(Theme::TextPrimary))
-            .arg(Theme::FsTitle)
-            .arg(QString::fromUtf8(Theme::TextMuted))
-            .arg(Theme::FsBody));
+            "#card { background-color:%1; border:1px solid %2; border-radius:%3px; }"
+            "#search { background-color:%4; border:1px solid %2; border-radius:%5px;"
+            "         padding:6px 10px; color:%6; font-size:%7px; selection-background-color:%8; }"
+            "#search:focus { border:1px solid %8; }"
+            "#count { color:%9; font-size:%10px; padding:0 4px; }"
+            "#iconBtn { background:transparent; border:none; color:%9; font-size:15px; border-radius:6px; }"
+            "#iconBtn:hover { background-color:%4; color:%6; }"
+            "#list { background:transparent; }"
+            "#list::item { border:none; }"
+            "#footer { color:%9; font-size:%11px; padding-top:4px; }"
+            "QScrollBar:vertical { background:transparent; width:8px; margin:2px; }"
+            "QScrollBar::handle:vertical { background:%2; border-radius:4px; min-height:24px; }"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+            .arg(QString::fromUtf8(Theme::Surface))       // 1
+            .arg(QString::fromUtf8(Theme::Border))        // 2
+            .arg(Theme::RadiusLg)                          // 3
+            .arg(QString::fromUtf8(Theme::SurfaceAlt))    // 4
+            .arg(Theme::RadiusMd)                          // 5
+            .arg(QString::fromUtf8(Theme::TextPrimary))   // 6
+            .arg(Theme::FsBody)                            // 7
+            .arg(QString::fromUtf8(Theme::Accent))        // 8
+            .arg(QString::fromUtf8(Theme::TextMuted))     // 9
+            .arg(Theme::FsMeta)                            // 10
+            .arg(Theme::FsMicro));                         // 11
+}
+
+void OverlayWindow::reload() {
+    const int keepRow = currentRow();
+    m_model->setEntries(m_db->search(m_search->text()));
+    m_count->setText(QString::number(m_model->rowCount()));
+    if (m_model->rowCount() > 0)
+        selectRow(qBound(0, keepRow < 0 ? 0 : keepRow, m_model->rowCount() - 1));
+}
+
+void OverlayWindow::selectRow(int row) {
+    const QModelIndex idx = m_model->index(row, 0);
+    if (idx.isValid()) {
+        m_list->setCurrentIndex(idx);
+        m_list->scrollTo(idx, QAbstractItemView::EnsureVisible);
+    }
+}
+
+int OverlayWindow::currentRow() const {
+    return m_list->currentIndex().row();
+}
+
+bool OverlayWindow::hasSelection() const {
+    return m_model->isValidRow(currentRow());
+}
+
+const ClipEntry* OverlayWindow::currentEntry() const {
+    const int row = currentRow();
+    return m_model->isValidRow(row) ? &m_model->entryAt(row) : nullptr;
 }
 
 void OverlayWindow::showAtCursor() {
+    m_search->clear();          // textChanged → reload() with full history
+    reload();
+    selectRow(0);
+
     const QPoint cursor = QCursor::pos();
     QScreen* screen = QGuiApplication::screenAt(cursor);
     if (!screen)
@@ -81,17 +202,16 @@ void OverlayWindow::showAtCursor() {
 
     int x = cursor.x() - width() / 2;
     int y = cursor.y() + 12;
-
-    // Keep the whole card on the active screen.
     x = qBound(area.left(), x, area.right() - width());
     if (y + height() > area.bottom())
-        y = cursor.y() - height() - 12; // flip above the cursor if no room below
+        y = cursor.y() - height() - 12;
     y = qBound(area.top(), y, area.bottom() - height());
 
     move(x, y);
     show();
     raise();
     activateWindow();
+    m_search->setFocus();
 }
 
 void OverlayWindow::toggleAtCursor() {
@@ -99,6 +219,179 @@ void OverlayWindow::toggleAtCursor() {
         hide();
     else
         showAtCursor();
+}
+
+void OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
+    QClipboard* cb = QApplication::clipboard();
+    if (m_monitor)
+        m_monitor->ignoreNextChange();
+
+    if (entry.isImage() && !entry.imagePath.isEmpty()) {
+        const QImage img(entry.imagePath);
+        if (!img.isNull())
+            cb->setImage(img);
+        return;
+    }
+
+    QString text = entry.content;
+    switch (format) {
+        case PasteFormat::Upper: text = text.toUpper(); break;
+        case PasteFormat::Lower: text = text.toLower(); break;
+        case PasteFormat::Title: text = toTitleCase(text); break;
+        case PasteFormat::Trim:  text = text.trimmed();   break;
+        case PasteFormat::Plain: break;
+    }
+    cb->setText(text);
+}
+
+void OverlayWindow::pasteCurrent(PasteFormat format) {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    hide();
+    putOnClipboard(*e, format);
+    // Let focus return to the previously active window before sending Ctrl+V.
+    QTimer::singleShot(80, [] { platform::simulatePaste(); });
+}
+
+void OverlayWindow::copyCurrent() {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    putOnClipboard(*e, PasteFormat::Plain);
+    hide();
+}
+
+void OverlayWindow::pinCurrent() {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    const int row = currentRow();
+    m_db->togglePin(e->id);
+    reload();
+    selectRow(row);
+}
+
+void OverlayWindow::editCurrent() {
+    const ClipEntry* e = currentEntry();
+    if (!e || e->isImage())
+        return;
+    const qint64 id = e->id;
+    const int row = currentRow();
+    bool ok = false;
+    const QString text = QInputDialog::getMultiLineText(
+        this, QStringLiteral("Edit clip"), QStringLiteral("Content:"), e->content, &ok);
+    if (ok) {
+        m_db->updateContent(id, text);
+        reload();
+        selectRow(row);
+    }
+    activateWindow();
+    m_search->setFocus();
+}
+
+void OverlayWindow::deleteCurrent() {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    const int row = currentRow();
+    if (e->isImage() && !e->imagePath.isEmpty())
+        QFile::remove(e->imagePath);
+    m_db->removeEntry(e->id);
+    reload();
+    if (m_model->rowCount() > 0)
+        selectRow(qMin(row, m_model->rowCount() - 1));
+}
+
+void OverlayWindow::showFormatMenu() {
+    if (!hasSelection())
+        return;
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Plain"),  [this] { pasteCurrent(PasteFormat::Plain); });
+    menu.addAction(QStringLiteral("UPPERCASE"), [this] { pasteCurrent(PasteFormat::Upper); });
+    menu.addAction(QStringLiteral("lowercase"), [this] { pasteCurrent(PasteFormat::Lower); });
+    menu.addAction(QStringLiteral("Title Case"), [this] { pasteCurrent(PasteFormat::Title); });
+    menu.addAction(QStringLiteral("Trim whitespace"), [this] { pasteCurrent(PasteFormat::Trim); });
+    const QRect r = m_list->visualRect(m_list->currentIndex());
+    menu.exec(m_list->viewport()->mapToGlobal(r.bottomLeft()));
+}
+
+void OverlayWindow::showContextMenu(const QPoint& globalPos) {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return;
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Paste"), [this] { pasteCurrent(); });
+    menu.addAction(QStringLiteral("Copy"), [this] { copyCurrent(); });
+    menu.addAction(e->pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin"),
+                   [this] { pinCurrent(); });
+    if (!e->isImage())
+        menu.addAction(QStringLiteral("Edit…"), [this] { editCurrent(); });
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Delete"), [this] { deleteCurrent(); });
+    menu.exec(globalPos);
+}
+
+void OverlayWindow::openSettings() {
+    SettingsDialog dlg(m_db, this);
+    connect(&dlg, &SettingsDialog::pauseToggled, this,
+            [this](bool paused) { if (m_monitor) m_monitor->setPaused(paused); });
+    connect(&dlg, &SettingsDialog::settingsChanged, this, [this] { reload(); });
+    dlg.exec();
+    reload();
+    activateWindow();
+    m_search->setFocus();
+}
+
+bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
+    if ((watched == m_search || watched == m_list) && event->type() == QEvent::KeyPress) {
+        auto* ke = static_cast<QKeyEvent*>(event);
+        const int key = ke->key();
+        const Qt::KeyboardModifiers mods = ke->modifiers();
+
+        // Ctrl+1..9 → quick-paste the Nth visible clip.
+        if ((mods & Qt::ControlModifier) && key >= Qt::Key_1 && key <= Qt::Key_9) {
+            const int row = key - Qt::Key_1;
+            if (m_model->isValidRow(row)) {
+                selectRow(row);
+                pasteCurrent();
+            }
+            return true;
+        }
+
+        switch (key) {
+            case Qt::Key_Down:
+                if (m_model->rowCount() > 0)
+                    selectRow(qMin(currentRow() + 1, m_model->rowCount() - 1));
+                return true;
+            case Qt::Key_Up:
+                if (m_model->rowCount() > 0)
+                    selectRow(qMax(currentRow() - 1, 0));
+                return true;
+            case Qt::Key_Return:
+            case Qt::Key_Enter:
+                if (mods & Qt::ShiftModifier)
+                    showFormatMenu();
+                else
+                    pasteCurrent();
+                return true;
+            case Qt::Key_Escape:
+                hide();
+                return true;
+            case Qt::Key_F2:
+                editCurrent();
+                return true;
+            case Qt::Key_Delete:
+                if (mods & Qt::ShiftModifier) {
+                    deleteCurrent();
+                    return true;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void OverlayWindow::keyPressEvent(QKeyEvent* event) {
@@ -110,7 +403,6 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 void OverlayWindow::changeEvent(QEvent* event) {
-    // Click-away / Alt-Tab: a launcher-style overlay should dismiss itself.
     if (event->type() == QEvent::ActivationChange && isVisible() && !isActiveWindow())
         hide();
     QWidget::changeEvent(event);
