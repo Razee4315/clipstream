@@ -2,6 +2,20 @@
 
 All notable changes to ClipStream.
 
+## [0.2.2] - 2026
+
+### Added
+- Real icon set (Lucide SVGs, recoloured per theme) across the app — no emojis
+- Interactive row action bar (Pin/Copy/Edit/Delete) with hover states and a
+  copy → check-mark confirmation
+- New ClipStream logo (replacing the inherited icon)
+- Redesigned, theme-consistent Settings page
+
+### Fixed
+- A single screenshot no longer creates multiple duplicate image entries
+- Sensitive/other rows that previously couldn't be deleted now delete correctly
+  (FTS triggers made symmetric)
+
 ## [0.2.1] - 2026
 
 ### Added
