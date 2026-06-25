@@ -2,6 +2,13 @@
 
 All notable changes to ClipStream.
 
+## [0.2.1] - 2026
+
+### Added
+- Inline row action buttons (Pin / Copy / Edit / Delete) on the selected or
+  hovered row — no right-click needed
+- More themes: Midnight, Nord, Forest, Rosé, Solarized Light (plus System/Dark/Light)
+
 ## [0.2.0] - 2026
 
 ### Changed
