@@ -7,6 +7,7 @@ class QListWidget;
 class QLineEdit;
 class QSpinBox;
 class QCheckBox;
+class QComboBox;
 
 // Configuration UI: ignored apps (clipboard from them is never stored), history
 // retention limits, capture pause, and launch-at-startup. Reads/writes through
@@ -34,4 +35,5 @@ private:
     QCheckBox* m_pauseCapture = nullptr;
     QCheckBox* m_launchAtStartup = nullptr;
     QCheckBox* m_discardSensitive = nullptr;
+    QComboBox* m_themeCombo = nullptr;
 };

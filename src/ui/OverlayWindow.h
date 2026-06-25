@@ -12,6 +12,7 @@ class QLineEdit;
 class QListView;
 class QLabel;
 class QModelIndex;
+class QPropertyAnimation;
 
 // The frameless launcher overlay: search box + history list + keyboard-driven
 // actions (paste, format-paste, pin, edit, delete, copy). Talks to the Database
@@ -24,7 +25,8 @@ public:
 
     void showAtCursor();
     void toggleAtCursor();
-    void reload(); // re-run the current query and refresh the list
+    void reload();      // re-run the current query and refresh the list
+    void applyTheme();  // (re)build the stylesheet from the current palette
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -64,4 +66,5 @@ private:
     QListView* m_list = nullptr;
     HistoryModel* m_model = nullptr;
     EntryDelegate* m_delegate = nullptr;
+    QPropertyAnimation* m_fade = nullptr;
 };

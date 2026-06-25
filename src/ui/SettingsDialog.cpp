@@ -5,6 +5,7 @@
 #include "theme.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -28,6 +29,29 @@ void SettingsDialog::buildUi() {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(Theme::S5, Theme::S5, Theme::S5, Theme::S5);
     root->setSpacing(Theme::S4);
+
+    // --- Appearance -----------------------------------------------------------
+    auto* appearanceBox = new QGroupBox(QStringLiteral("Appearance"), this);
+    auto* appearanceForm = new QFormLayout(appearanceBox);
+
+    m_themeCombo = new QComboBox(appearanceBox);
+    m_themeCombo->addItems({QStringLiteral("System"), QStringLiteral("Dark"), QStringLiteral("Light")});
+    const QString savedTheme = m_db->setting(QStringLiteral("theme"), QStringLiteral("system"));
+    m_themeCombo->setCurrentIndex(savedTheme == QLatin1String("dark")  ? 1
+                                  : savedTheme == QLatin1String("light") ? 2
+                                                                         : 0);
+    connect(m_themeCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        const QString value = idx == 1 ? QStringLiteral("dark")
+                            : idx == 2 ? QStringLiteral("light")
+                                       : QStringLiteral("system");
+        m_db->setSetting(QStringLiteral("theme"), value);
+        Theme::setMode(idx == 1 ? Theme::Mode::Dark
+                       : idx == 2 ? Theme::Mode::Light
+                                  : Theme::Mode::System);
+        emit settingsChanged();
+    });
+    appearanceForm->addRow(QStringLiteral("Theme"), m_themeCombo);
+    root->addWidget(appearanceBox);
 
     // --- Capture --------------------------------------------------------------
     auto* captureBox = new QGroupBox(QStringLiteral("Capture"), this);
@@ -90,7 +114,7 @@ void SettingsDialog::buildUi() {
     auto* ignoreLayout = new QVBoxLayout(ignoreBox);
 
     auto* hint = new QLabel(QStringLiteral("Clipboard from these apps is never saved."), ignoreBox);
-    hint->setStyleSheet(QStringLiteral("color:%1;").arg(QString::fromUtf8(Theme::TextMuted)));
+    hint->setStyleSheet(QStringLiteral("color:%1;").arg(Theme::palette().textMuted));
     ignoreLayout->addWidget(hint);
 
     auto* addRow = new QHBoxLayout();

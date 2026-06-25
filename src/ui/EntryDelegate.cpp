@@ -131,13 +131,14 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     const QRect full = option.rect.adjusted(Theme::S2, 2, -Theme::S2, -2);
+    const Theme::Palette& pal = Theme::palette();
     const bool selected = option.state & QStyle::State_Selected;
     if (selected) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(Theme::SurfaceAlt));
+        painter->setBrush(QColor(pal.surfaceAlt));
         painter->drawRoundedRect(full, Theme::RadiusSm, Theme::RadiusSm);
         // accent rail on the left edge of the selected row
-        painter->setBrush(QColor(Theme::Accent));
+        painter->setBrush(QColor(pal.accent));
         painter->drawRoundedRect(QRect(full.left(), full.top() + 8, 3, full.height() - 16), 2, 2);
     }
 
@@ -185,7 +186,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
                           : option.font;
     titleFont.setPixelSize(Theme::FsBody);
     painter->setFont(titleFont);
-    painter->setPen(QColor(e.sensitive ? Theme::TextMuted : Theme::TextPrimary));
+    painter->setPen(QColor(e.sensitive ? pal.textMuted : pal.textPrimary));
     const QFontMetrics tfm(titleFont);
     const QString elidedTitle = tfm.elidedText(title, Qt::ElideRight, textArea.width());
     painter->drawText(QRect(textArea.left(), textArea.top() + 9, textArea.width(), tfm.height()),
@@ -194,7 +195,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     QFont metaFont = option.font;
     metaFont.setPixelSize(Theme::FsMeta);
     painter->setFont(metaFont);
-    painter->setPen(QColor(Theme::TextMuted));
+    painter->setPen(QColor(pal.textMuted));
     const QString meta = appDisplayName(e.sourceApp) + QStringLiteral("  ·  ") + relativeTime(e.createdAt);
     const QFontMetrics mfm(metaFont);
     painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 7, textArea.width(), mfm.height()),
@@ -203,7 +204,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     // Pin marker.
     if (e.pinned) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(Theme::Accent));
+        painter->setBrush(QColor(pal.accent));
         painter->drawEllipse(QPoint(full.right() - Theme::S2, full.top() + Theme::S3), 3, 3);
     }
 

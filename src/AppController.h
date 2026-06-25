@@ -27,6 +27,7 @@ private:
     void setupHotkey();
     void connectCapture();
     void seedDefaultIgnoredApps();
+    void maybeShowOnboarding();
 
     void onTextCaptured(const QString& text, const QString& sourceApp);
     void onImageCaptured(const QImage& image, const QString& sourceApp);

@@ -26,8 +26,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
+#include <QEasingCurve>
 #include <QMenu>
 #include <QProcess>
+#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScreen>
 #include <QTimer>
@@ -150,6 +152,17 @@ void OverlayWindow::buildUi() {
     setFixedSize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
                  Theme::OverlayHeight + 2 * Theme::ShadowMargin);
 
+    m_fade = new QPropertyAnimation(this, "windowOpacity", this);
+    m_fade->setDuration(110);
+    m_fade->setStartValue(0.0);
+    m_fade->setEndValue(1.0);
+    m_fade->setEasingCurve(QEasingCurve::OutCubic);
+
+    applyTheme();
+}
+
+void OverlayWindow::applyTheme() {
+    const Theme::Palette& p = Theme::palette();
     setStyleSheet(
         QStringLiteral(
             "#card { background-color:%1; border:1px solid %2; border-radius:%3px; }"
@@ -165,17 +178,17 @@ void OverlayWindow::buildUi() {
             "QScrollBar:vertical { background:transparent; width:8px; margin:2px; }"
             "QScrollBar::handle:vertical { background:%2; border-radius:4px; min-height:24px; }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-            .arg(QString::fromUtf8(Theme::Surface))       // 1
-            .arg(QString::fromUtf8(Theme::Border))        // 2
-            .arg(Theme::RadiusLg)                          // 3
-            .arg(QString::fromUtf8(Theme::SurfaceAlt))    // 4
-            .arg(Theme::RadiusMd)                          // 5
-            .arg(QString::fromUtf8(Theme::TextPrimary))   // 6
-            .arg(Theme::FsBody)                            // 7
-            .arg(QString::fromUtf8(Theme::Accent))        // 8
-            .arg(QString::fromUtf8(Theme::TextMuted))     // 9
-            .arg(Theme::FsMeta)                            // 10
-            .arg(Theme::FsMicro));                         // 11
+            .arg(p.surface)       // 1
+            .arg(p.border)        // 2
+            .arg(Theme::RadiusLg) // 3
+            .arg(p.surfaceAlt)    // 4
+            .arg(Theme::RadiusMd) // 5
+            .arg(p.textPrimary)   // 6
+            .arg(Theme::FsBody)   // 7
+            .arg(p.accent)        // 8
+            .arg(p.textMuted)     // 9
+            .arg(Theme::FsMeta)   // 10
+            .arg(Theme::FsMicro));// 11
 }
 
 void OverlayWindow::reload() {
@@ -226,10 +239,12 @@ void OverlayWindow::showAtCursor() {
     y = qBound(area.top(), y, area.bottom() - height());
 
     move(x, y);
+    setWindowOpacity(0.0); // fade in from transparent
     show();
     raise();
     activateWindow();
     m_search->setFocus();
+    m_fade->start();
 }
 
 void OverlayWindow::toggleAtCursor() {
@@ -450,8 +465,13 @@ void OverlayWindow::openSettings() {
     SettingsDialog dlg(m_db, this);
     connect(&dlg, &SettingsDialog::pauseToggled, this,
             [this](bool paused) { if (m_monitor) m_monitor->setPaused(paused); });
-    connect(&dlg, &SettingsDialog::settingsChanged, this, [this] { reload(); });
+    connect(&dlg, &SettingsDialog::settingsChanged, this, [this] {
+        applyTheme();
+        m_list->viewport()->update();
+        reload();
+    });
     dlg.exec();
+    applyTheme();
     reload();
     activateWindow();
     m_search->setFocus();

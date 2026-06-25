@@ -1,22 +1,13 @@
 #pragma once
 
 // ClipStream design tokens — the single source of truth for every visual
-// constant. Nothing in the UI should hardcode a color, spacing, radius, or
-// font size: pull it from here. See QT-AGENT-GUIDE.md §11.
+// constant. Spacing/radius/type are compile-time; colours live in a runtime
+// Palette so the app can switch between dark and light. See QT-AGENT-GUIDE.md §11.
 
 #include <QString>
 #include <QtGlobal>
 
 namespace Theme {
-
-// ---- Color (dark palette; light palette arrives in the polish phase) --------
-constexpr auto Bg          = "#161618"; // backdrop behind the translucent card
-constexpr auto Surface     = "#202023"; // primary card surface
-constexpr auto SurfaceAlt  = "#27272b"; // raised rows / hover
-constexpr auto Border      = "#323236";
-constexpr auto Accent      = "#3b82f6";
-constexpr auto TextPrimary = "#f2f2f4";
-constexpr auto TextMuted   = "#9a9aa2";
 
 // ---- Spacing scale (4 px grid — use ONLY these) -----------------------------
 constexpr int S1 = 4, S2 = 8, S3 = 12, S4 = 16, S5 = 24, S6 = 32;
@@ -35,6 +26,24 @@ constexpr int ShadowMargin  = 24; // transparent gutter so the drop shadow shows
 // ---- List rows --------------------------------------------------------------
 constexpr int RowHeight = 56;
 constexpr int BadgeSize = 34;
+
+// ---- Colour palette (switchable) --------------------------------------------
+enum class Mode { System, Dark, Light };
+
+struct Palette {
+    QString bg;
+    QString surface;
+    QString surfaceAlt;
+    QString border;
+    QString accent;
+    QString textPrimary;
+    QString textMuted;
+};
+
+void setMode(Mode mode);
+Mode mode();
+bool isDark();                  // resolves System against the OS colour scheme
+const Palette& palette();
 
 inline QString fontFamily() {
 #if defined(Q_OS_WIN)

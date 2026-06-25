@@ -34,6 +34,8 @@ endif()
 
 set(SOURCES
     src/main.cpp
+    src/theme.cpp
+    src/theme.h
     src/AppController.cpp
     src/AppController.h
     # core

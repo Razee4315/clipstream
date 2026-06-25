@@ -4,6 +4,7 @@
 #include "core/ContentClassifier.h"
 #include "core/Database.h"
 #include "platform/HotkeyManager.h"
+#include "theme.h"
 #include "ui/OverlayWindow.h"
 
 #include <QAction>
@@ -37,11 +38,17 @@ bool AppController::initialize() {
     m_monitor->setPaused(m_db->setting(QStringLiteral("paused")) == QLatin1String("1"));
     seedDefaultIgnoredApps();
 
+    const QString theme = m_db->setting(QStringLiteral("theme"), QStringLiteral("system"));
+    Theme::setMode(theme == QLatin1String("dark")  ? Theme::Mode::Dark
+                   : theme == QLatin1String("light") ? Theme::Mode::Light
+                                                     : Theme::Mode::System);
+
     m_overlay = std::make_unique<OverlayWindow>(m_db.get(), m_monitor.get());
 
     setupTray();
     setupHotkey();
     connectCapture();
+    maybeShowOnboarding();
     return true;
 }
 
@@ -76,6 +83,17 @@ void AppController::setupTray() {
 
     m_tray->setContextMenu(menu);
     m_tray->show();
+}
+
+void AppController::maybeShowOnboarding() {
+    if (m_db->setting(QStringLiteral("onboarded")) == QLatin1String("1"))
+        return;
+    m_tray->showMessage(
+        QStringLiteral("ClipStream is running"),
+        QStringLiteral("Press Ctrl+Shift+V anywhere to open your clipboard history. "
+                       "It lives quietly in the tray."),
+        QSystemTrayIcon::Information, 6000);
+    m_db->setSetting(QStringLiteral("onboarded"), QStringLiteral("1"));
 }
 
 void AppController::seedDefaultIgnoredApps() {
