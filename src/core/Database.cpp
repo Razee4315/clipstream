@@ -102,17 +102,26 @@ bool Database::createSchema() {
         "CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5("
         "  content, content='clipboard_history', content_rowid='id')"));
     if (m_ftsAvailable) {
+        // Recreate triggers so older DBs pick up the fix below. A row is in the
+        // FTS index iff sensitive = 0, so every index op must be gated the same
+        // way — otherwise DELETE/UPDATE of a sensitive row errors and rolls back.
+        q.exec(QStringLiteral("DROP TRIGGER IF EXISTS history_ai"));
+        q.exec(QStringLiteral("DROP TRIGGER IF EXISTS history_ad"));
+        q.exec(QStringLiteral("DROP TRIGGER IF EXISTS history_au"));
         q.exec(QStringLiteral(
-            "CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON clipboard_history "
+            "CREATE TRIGGER history_ai AFTER INSERT ON clipboard_history "
             "WHEN new.sensitive = 0 BEGIN "
             "  INSERT INTO history_fts(rowid, content) VALUES (new.id, new.content); END"));
         q.exec(QStringLiteral(
-            "CREATE TRIGGER IF NOT EXISTS history_ad AFTER DELETE ON clipboard_history BEGIN "
+            "CREATE TRIGGER history_ad AFTER DELETE ON clipboard_history "
+            "WHEN old.sensitive = 0 BEGIN "
             "  INSERT INTO history_fts(history_fts, rowid, content) VALUES('delete', old.id, old.content); END"));
         q.exec(QStringLiteral(
-            "CREATE TRIGGER IF NOT EXISTS history_au AFTER UPDATE ON clipboard_history BEGIN "
-            "  INSERT INTO history_fts(history_fts, rowid, content) VALUES('delete', old.id, old.content); "
-            "  INSERT INTO history_fts(rowid, content) SELECT new.id, new.content WHERE new.sensitive = 0; END"));
+            "CREATE TRIGGER history_au AFTER UPDATE ON clipboard_history BEGIN "
+            "  INSERT INTO history_fts(history_fts, rowid, content) "
+            "    SELECT 'delete', old.id, old.content WHERE old.sensitive = 0; "
+            "  INSERT INTO history_fts(rowid, content) "
+            "    SELECT new.id, new.content WHERE new.sensitive = 0; END"));
     } else {
         qInfo("ClipStream: FTS5 unavailable, using LIKE search.");
     }

@@ -32,4 +32,5 @@ private:
     bool m_paused = false;
     bool m_ignoreNext = false;
     QString m_lastText;
+    quint64 m_lastImageHash = 0; // dedups repeated dataChanged for one image
 };
