@@ -2,6 +2,18 @@
 
 All notable changes to ClipStream.
 
+## [0.2.3] - 2026
+
+### Changed
+- New minimalist logo
+- Action buttons now appear on row hover (not only after selecting)
+- Settings page made more compact with plain-language labels
+- Simplified, clearer footer hints
+
+### Fixed
+- A screenshot posted as a burst no longer creates duplicate image entries
+  (image capture is now debounced)
+
 ## [0.2.2] - 2026
 
 ### Added
