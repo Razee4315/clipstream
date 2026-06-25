@@ -26,6 +26,7 @@ private:
     void setupTray();
     void setupHotkey();
     void connectCapture();
+    void seedDefaultIgnoredApps();
 
     void onTextCaptured(const QString& text, const QString& sourceApp);
     void onImageCaptured(const QImage& image, const QString& sourceApp);

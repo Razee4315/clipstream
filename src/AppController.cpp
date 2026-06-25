@@ -35,6 +35,7 @@ bool AppController::initialize() {
         QFile::remove(path);
 
     m_monitor->setPaused(m_db->setting(QStringLiteral("paused")) == QLatin1String("1"));
+    seedDefaultIgnoredApps();
 
     m_overlay = std::make_unique<OverlayWindow>(m_db.get(), m_monitor.get());
 
@@ -50,6 +51,18 @@ void AppController::setupTray() {
 
     auto* menu = new QMenu(m_overlay.get());
     QAction* openAct = menu->addAction(QStringLiteral("Open  (Ctrl+Shift+V)"));
+
+    QAction* pauseAct = menu->addAction(QStringLiteral("Pause capture"));
+    pauseAct->setCheckable(true);
+    pauseAct->setChecked(m_monitor->isPaused());
+    // Keep the checkmark honest no matter who toggled pause (settings dialog too).
+    connect(menu, &QMenu::aboutToShow, this,
+            [this, pauseAct] { pauseAct->setChecked(m_monitor->isPaused()); });
+    connect(pauseAct, &QAction::toggled, this, [this](bool paused) {
+        m_monitor->setPaused(paused);
+        m_db->setSetting(QStringLiteral("paused"), paused ? QStringLiteral("1") : QStringLiteral("0"));
+    });
+
     menu->addSeparator();
     QAction* quitAct = menu->addAction(QStringLiteral("Quit ClipStream"));
 
@@ -63,6 +76,21 @@ void AppController::setupTray() {
 
     m_tray->setContextMenu(menu);
     m_tray->show();
+}
+
+void AppController::seedDefaultIgnoredApps() {
+    if (m_db->setting(QStringLiteral("seeded")) == QLatin1String("1"))
+        return;
+    // Don't capture clipboard from common password managers by default.
+    const QStringList managers = {
+        QStringLiteral("1Password.exe"), QStringLiteral("Bitwarden.exe"),
+        QStringLiteral("KeePass.exe"),   QStringLiteral("KeePassXC.exe"),
+        QStringLiteral("LastPass.exe"),  QStringLiteral("Dashlane.exe"),
+        QStringLiteral("NordPass.exe"),  QStringLiteral("ProtonPass.exe"),
+    };
+    for (const QString& app : managers)
+        m_db->addIgnoredApp(app);
+    m_db->setSetting(QStringLiteral("seeded"), QStringLiteral("1"));
 }
 
 void AppController::setupHotkey() {
@@ -100,11 +128,15 @@ void AppController::onTextCaptured(const QString& text, const QString& sourceApp
     if (isIgnored(sourceApp))
         return;
 
+    const bool sensitive = ContentClassifier::looksSensitive(text);
+    if (sensitive && m_db->setting(QStringLiteral("discard_sensitive")) == QLatin1String("1"))
+        return; // privacy: never persist detected secrets
+
     ClipEntry e;
     e.content = text;
     e.sourceApp = sourceApp;
     e.type = ContentClassifier::classify(text);
-    e.sensitive = ContentClassifier::looksSensitive(text);
+    e.sensitive = sensitive;
     m_db->insertEntry(e);
     m_overlay->reload();
 }

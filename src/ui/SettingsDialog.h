@@ -33,4 +33,5 @@ private:
     QSpinBox* m_retentionDays = nullptr;
     QCheckBox* m_pauseCapture = nullptr;
     QCheckBox* m_launchAtStartup = nullptr;
+    QCheckBox* m_discardSensitive = nullptr;
 };

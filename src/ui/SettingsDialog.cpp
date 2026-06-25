@@ -47,6 +47,17 @@ void SettingsDialog::buildUi() {
             [](bool on) { platform::setLaunchAtStartup(on); });
     captureForm->addRow(m_launchAtStartup);
 
+    m_discardSensitive = new QCheckBox(
+        QStringLiteral("Never store passwords / secrets"), captureBox);
+    m_discardSensitive->setToolTip(
+        QStringLiteral("Clips that look like passwords, card numbers or API keys are dropped, not saved."));
+    m_discardSensitive->setChecked(m_db->setting(QStringLiteral("discard_sensitive")) == QLatin1String("1"));
+    connect(m_discardSensitive, &QCheckBox::toggled, this, [this](bool on) {
+        m_db->setSetting(QStringLiteral("discard_sensitive"),
+                         on ? QStringLiteral("1") : QStringLiteral("0"));
+    });
+    captureForm->addRow(m_discardSensitive);
+
     root->addWidget(captureBox);
 
     // --- History retention ----------------------------------------------------
