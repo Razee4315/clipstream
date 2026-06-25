@@ -284,6 +284,9 @@ void OverlayWindow::showAtCursor() {
     activateWindow();
     m_search->setFocus();
     m_fade->start();
+    // The list lays out during show(); reposition the action bar once geometry
+    // is final, otherwise it lands in the wrong spot on the very first open.
+    QTimer::singleShot(0, this, [this] { positionActionsBar(); });
 }
 
 void OverlayWindow::toggleAtCursor() {

@@ -12,8 +12,10 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFile>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -160,6 +162,22 @@ void SettingsDialog::buildUi() {
         emit settingsChanged();
     });
     historyForm->addRow(QStringLiteral("Forget after (days)"), m_retentionDays);
+
+    auto* clearBtn = new QPushButton(QStringLiteral(" Clear all history"), historyBox);
+    clearBtn->setIcon(IconFactory::icon(QStringLiteral("trash"), QColor(0xef, 0x44, 0x44), 15));
+    connect(clearBtn, &QPushButton::clicked, this, [this] {
+        const auto answer = QMessageBox::question(
+            this, QStringLiteral("Clear all history"),
+            QStringLiteral("Delete every clip, including pinned ones? This can't be undone."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes)
+            return;
+        const QStringList images = m_db->clearHistory();
+        for (const QString& path : images)
+            QFile::remove(path);
+        emit settingsChanged();
+    });
+    historyForm->addRow(QString(), clearBtn);
 
     root->addWidget(historyBox);
 

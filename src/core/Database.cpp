@@ -244,6 +244,19 @@ bool Database::removeEntry(qint64 id) {
     return q.exec();
 }
 
+QStringList Database::clearHistory() {
+    QStringList images;
+    QSqlQuery img(m_db);
+    if (img.exec(QStringLiteral("SELECT image_path FROM clipboard_history WHERE image_path IS NOT NULL")))
+        while (img.next())
+            if (const QString p = img.value(0).toString(); !p.isEmpty())
+                images << p;
+
+    QSqlQuery q(m_db);
+    q.exec(QStringLiteral("DELETE FROM clipboard_history"));
+    return images;
+}
+
 QStringList Database::cleanup(int maxAgeDays, int maxEntries) {
     QStringList orphanImages;
 
