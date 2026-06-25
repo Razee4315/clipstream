@@ -132,12 +132,14 @@ void OverlayWindow::buildUi() {
     m_list->setUniformItemSizes(true);
     m_list->setContextMenuPolicy(Qt::CustomContextMenu);
     m_list->setMouseTracking(true);
+    m_list->viewport()->setMouseTracking(true); // hover state → inline buttons
     m_list->installEventFilter(this);
     col->addWidget(m_list, 1);
 
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
     connect(m_list, &QListView::customContextMenuRequested, this,
             [this](const QPoint& pos) { showContextMenu(m_list->viewport()->mapToGlobal(pos)); });
+    connect(m_delegate, &EntryDelegate::actionClicked, this, &OverlayWindow::onRowAction);
 
     // --- Footer hints ---------------------------------------------------------
     auto* footer = new QLabel(
@@ -459,6 +461,18 @@ void OverlayWindow::newSnippet() {
     }
     activateWindow();
     m_search->setFocus();
+}
+
+void OverlayWindow::onRowAction(const QModelIndex& index, EntryDelegate::Action action) {
+    if (!index.isValid())
+        return;
+    m_list->setCurrentIndex(index); // operate on the clicked row
+    switch (action) {
+        case EntryDelegate::Action::Pin:    pinCurrent();    break;
+        case EntryDelegate::Action::Copy:   copyCurrent();   break;
+        case EntryDelegate::Action::Edit:   editCurrent();   break;
+        case EntryDelegate::Action::Delete: deleteCurrent(); break;
+    }
 }
 
 void OverlayWindow::openSettings() {

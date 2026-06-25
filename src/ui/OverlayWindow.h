@@ -1,13 +1,13 @@
 #pragma once
 
 #include "core/ClipEntry.h"
+#include "ui/EntryDelegate.h"
 
 #include <QWidget>
 
 class Database;
 class ClipboardMonitor;
 class HistoryModel;
-class EntryDelegate;
 class QLineEdit;
 class QListView;
 class QLabel;
@@ -49,6 +49,7 @@ private:
     void deleteCurrent();
     void showFormatMenu();
     void showContextMenu(const QPoint& globalPos);
+    void onRowAction(const QModelIndex& index, EntryDelegate::Action action);
     void openSettings();
     void newSnippet();
     void runPrimarySmartAction();

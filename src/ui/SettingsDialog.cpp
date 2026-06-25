@@ -35,19 +35,19 @@ void SettingsDialog::buildUi() {
     auto* appearanceForm = new QFormLayout(appearanceBox);
 
     m_themeCombo = new QComboBox(appearanceBox);
-    m_themeCombo->addItems({QStringLiteral("System"), QStringLiteral("Dark"), QStringLiteral("Light")});
     const QString savedTheme = m_db->setting(QStringLiteral("theme"), QStringLiteral("system"));
-    m_themeCombo->setCurrentIndex(savedTheme == QLatin1String("dark")  ? 1
-                                  : savedTheme == QLatin1String("light") ? 2
-                                                                         : 0);
+    int current = 0;
+    const auto& defs = Theme::themes();
+    for (int i = 0; i < defs.size(); ++i) {
+        m_themeCombo->addItem(defs[i].label, defs[i].id);
+        if (defs[i].id == savedTheme)
+            current = i;
+    }
+    m_themeCombo->setCurrentIndex(current);
     connect(m_themeCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
-        const QString value = idx == 1 ? QStringLiteral("dark")
-                            : idx == 2 ? QStringLiteral("light")
-                                       : QStringLiteral("system");
-        m_db->setSetting(QStringLiteral("theme"), value);
-        Theme::setMode(idx == 1 ? Theme::Mode::Dark
-                       : idx == 2 ? Theme::Mode::Light
-                                  : Theme::Mode::System);
+        const QString id = m_themeCombo->itemData(idx).toString();
+        m_db->setSetting(QStringLiteral("theme"), id);
+        Theme::setThemeId(id);
         emit settingsChanged();
     });
     appearanceForm->addRow(QStringLiteral("Theme"), m_themeCombo);

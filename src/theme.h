@@ -1,10 +1,11 @@
 #pragma once
 
 // ClipStream design tokens — the single source of truth for every visual
-// constant. Spacing/radius/type are compile-time; colours live in a runtime
-// Palette so the app can switch between dark and light. See QT-AGENT-GUIDE.md §11.
+// constant. Spacing/radius/type are compile-time; colours come from a named,
+// switchable Palette. See QT-AGENT-GUIDE.md §11.
 
 #include <QString>
+#include <QVector>
 #include <QtGlobal>
 
 namespace Theme {
@@ -27,9 +28,7 @@ constexpr int ShadowMargin  = 24; // transparent gutter so the drop shadow shows
 constexpr int RowHeight = 56;
 constexpr int BadgeSize = 34;
 
-// ---- Colour palette (switchable) --------------------------------------------
-enum class Mode { System, Dark, Light };
-
+// ---- Colour palette (switchable, named) -------------------------------------
 struct Palette {
     QString bg;
     QString surface;
@@ -40,9 +39,20 @@ struct Palette {
     QString textMuted;
 };
 
-void setMode(Mode mode);
-Mode mode();
-bool isDark();                  // resolves System against the OS colour scheme
+struct ThemeDef {
+    QString id;     // persisted key, e.g. "nord"
+    QString label;  // shown in the picker, e.g. "Nord"
+    Palette palette;
+    bool dark;
+};
+
+// All selectable themes, in display order. "system" is the first entry and
+// resolves to the built-in dark/light palette based on the OS colour scheme.
+const QVector<ThemeDef>& themes();
+
+void setThemeId(const QString& id);
+QString themeId();
+bool isDark();              // resolves "system" against the OS colour scheme
 const Palette& palette();
 
 inline QString fontFamily() {

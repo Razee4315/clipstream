@@ -38,10 +38,7 @@ bool AppController::initialize() {
     m_monitor->setPaused(m_db->setting(QStringLiteral("paused")) == QLatin1String("1"));
     seedDefaultIgnoredApps();
 
-    const QString theme = m_db->setting(QStringLiteral("theme"), QStringLiteral("system"));
-    Theme::setMode(theme == QLatin1String("dark")  ? Theme::Mode::Dark
-                   : theme == QLatin1String("light") ? Theme::Mode::Light
-                                                     : Theme::Mode::System);
+    Theme::setThemeId(m_db->setting(QStringLiteral("theme"), QStringLiteral("system")));
 
     m_overlay = std::make_unique<OverlayWindow>(m_db.get(), m_monitor.get());
 
