@@ -2,6 +2,18 @@
 
 All notable changes to ClipStream.
 
+## [0.2.4] - 2026
+
+### Changed
+- Logo recoloured to blue (no purple)
+
+### Fixed
+- Action buttons now land in the correct position on the very first open
+- The most-recent clip can now be deleted (its button was mispositioned)
+
+### Added
+- "Clear all history" button in Settings (deletes every clip + image files)
+
 ## [0.2.3] - 2026
 
 ### Changed
