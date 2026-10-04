@@ -2,6 +2,26 @@
 
 All notable changes to ClipStream.
 
+## [0.3.0] - 2026-10-04
+
+### Added
+- Roomier clipboard overlay with All clips, Pinned, Text, Images, and Links filters
+- Full text/image previews, explicit sensitive-content reveal, and capture controls
+- Ctrl+Space to preview, Ctrl+P to pin, and Ctrl+F to focus search
+- New blue clipboard-and-stream logo across the app, tray, and installer
+- Nine regression tests and automated CI checks
+
+### Fixed
+- Literal searches for URLs, paths, punctuation, and source app names
+- Selection stays on the same clip when history changes or a clip is pinned
+- Copying preserves indentation and trailing newlines
+- Pausing capture cancels pending images; missing images no longer paste stale content
+- Saving an existing pinned snippet keeps it pinned
+- Retention limits count unpinned clips separately; edits refresh type and secret detection
+
+### Changed
+- Shorter README with an actual app screenshot and a direct download link
+
 ## [0.2.4] - 2026
 
 ### Changed

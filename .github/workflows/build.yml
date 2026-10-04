@@ -74,3 +74,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: installer/output/*.exe
+          body_path: installer/release-notes.md

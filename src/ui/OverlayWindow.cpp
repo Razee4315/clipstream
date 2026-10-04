@@ -109,7 +109,7 @@ void OverlayWindow::buildUi() {
     brand->setObjectName(QStringLiteral("brand"));
     auto* mark = new QLabel(m_card);
     mark->setObjectName(QStringLiteral("brandMark"));
-    mark->setPixmap(IconFactory::pixmap(QStringLiteral("copy"), QColor("#ffffff"), 20));
+    mark->setPixmap(QPixmap(QStringLiteral(":/icon.png")).scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     mark->setFixedSize(36, 36);
     mark->setAlignment(Qt::AlignCenter);
     header->addWidget(mark);
@@ -287,7 +287,7 @@ void OverlayWindow::applyTheme() {
         "QWidget { color:@text; }"
         "#card { background:@surface; border:1px solid @border; border-radius:18px; }"
         "#brand { font-size:20px; font-weight:700; letter-spacing:-0.5px; }"
-        "#brandMark { background:@accent; border-radius:10px; }"
+        "#brandMark { background:transparent; }"
         "#subtitle, #emptyHint { color:@muted; font-size:12px; }"
         "#search { background:@alt; border:1px solid @border; border-radius:10px;"
         " padding:8px 12px; font-size:14px; selection-background-color:@accent; }"

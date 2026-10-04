@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ClipStream VERSION 0.2.4 LANGUAGES CXX)
+project(ClipStream VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Svg)
+
+add_executable(ClipStreamLogo EXCLUDE_FROM_ALL tools/RenderLogo.cpp)
+target_link_libraries(ClipStreamLogo PRIVATE Qt6::Gui Qt6::Svg)
 
 # --- Platform-specific implementations (swapped at build time) -----------------
 # The headers in src/platform/ define the contract; the .cpp picked here is the

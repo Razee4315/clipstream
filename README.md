@@ -1,116 +1,64 @@
-# ClipStream
+<p align="center">
+  <img src="resources/logo.svg" width="88" alt="ClipStream logo">
+</p>
+<h1 align="center">ClipStream</h1>
+<p align="center">Your clipboard, with a memory.</p>
+<p align="center">
+  A fast, native Windows clipboard manager. Find it. Preview it. Paste it.
+</p>
+<p align="center">
+  <a href="https://github.com/Razee4315/clipstream/releases/latest"><img src="https://img.shields.io/github/v/release/Razee4315/clipstream?color=2563eb&label=download" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-2563eb" alt="Windows 10 and 11">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-64748b" alt="MIT license"></a>
+</p>
+<p align="center">
+  <img src="images/overlay-dark.png" width="540" alt="ClipStream showing search, filters, pinned snippets, and clipboard history in dark mode">
+</p>
 
-A fast, native clipboard manager for Windows — built in C++ with Qt 6.
+## Get started
 
-![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)
-![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?style=flat&logo=cplusplus&logoColor=white)
-![Qt](https://img.shields.io/badge/Qt-6-41CD52?style=flat&logo=qt&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
+[**Download ClipStream for Windows →**](https://github.com/Razee4315/clipstream/releases/latest)
 
-ClipStream remembers everything you copy — text and images — and brings it back
-instantly with a global hotkey, full-text search, and one-keystroke paste.
+Run the installer, copy something, then press **Ctrl+Shift+V** to open your history.
+ClipStream stays in your system tray.
 
-> **Note:** ClipStream was originally built with Tauri (Rust + Preact). It has been
-> rebuilt from the ground up in **C++/Qt 6** for a smaller, faster, fully native app.
-> The original implementation lives on the [`legacy`](../../tree/legacy) branch.
+## Made for your everyday copy & paste
 
-## Features
-
-- **Event-driven capture** — listens to the OS clipboard, no polling, ~0% idle CPU
-- **Global hotkey** — `Ctrl+Shift+V` opens the overlay anywhere, at your cursor
-- **Full-text search** — instant SQLite FTS5 search across your history
-- **Focused browsing** — All clips, Pinned, Text, Images, and Links filters; search by content or source app
-- **Full clip preview** — inspect text and images without pasting; explicitly reveal sensitive content
-- **Capture at a glance** — pause or resume directly from the overlay header
-- **Text & images** — images stored as files on disk (not bloating the database)
-- **Smart actions** — open URLs, reveal files, convert colours, evaluate maths
-- **Format on paste** — paste as UPPER / lower / Title / trimmed
-- **Quick paste** — `Ctrl+1`–`9` to paste the Nth clip instantly
-- **Snippets** — save reusable text (`Ctrl+N`), kept pinned at the top
-- **Source tracking** — shows which app each clip came from
-- **Privacy first** — masks detected secrets, excludes password managers, pause toggle
-- **Themes** — System / Dark / Light
-- **Lightweight & native** — ~39 MB bundle, single-file installer ~13 MB
-
-## Install
-
-Download the latest installer from [Releases](https://github.com/Razee4315/clipstream/releases),
-or build from source below.
+- **Find anything faster.** Search text or app names; filter pinned clips, text, images, and links.
+- **Keep the useful bits.** Pin favourites, save reusable snippets, and preview full clips before pasting.
+- **Do more with a clip.** Open links and files, change text case, convert colours, or paste a calculation result.
+- **Stay in control.** Pause capture, exclude apps, set retention, and mask detected secrets. History stays on your device.
+- **Feel at home.** Native C++ / Qt 6, keyboard navigation, and eight theme options including System.
 
 ## Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Shift+V` | Open / close the overlay |
-| `↑` `↓` | Navigate |
-| `Enter` | Paste selected |
-| `Shift+Enter` | Paste with formatting |
-| `Ctrl+1`–`9` | Quick-paste the Nth clip |
-| `Ctrl+O` | Open link / file (smart action) |
-| `Ctrl+N` | New snippet |
-| `Ctrl+Space` | Preview the full clip |
-| `Ctrl+P` | Pin / unpin selected clip |
-| `Ctrl+F` | Focus search |
-| `F2` | Edit clip |
-| `Shift+Del` | Delete clip |
-| `Esc` | Close |
+| Action | Shortcut |
+| --- | --- |
+| Open / close | **Ctrl+Shift+V** |
+| Navigate / paste | **↑ ↓** / **Enter** |
+| Quick-paste a clip | **Ctrl+1–9** |
+| Preview / pin | **Ctrl+Space** / **Ctrl+P** |
+| New snippet / search | **Ctrl+N** / **Ctrl+F** |
+| Format on paste | **Shift+Enter** |
 
-## Tech stack
+<details>
+<summary>More shortcuts & building from source</summary>
 
-- **Language:** C++17
-- **UI:** Qt 6 Widgets (frameless translucent overlay, model/view, custom delegate)
-- **Storage:** SQLite + FTS5 via Qt SQL
-- **Platform:** Win32 (`RegisterHotKey`, `SendInput`, `GetForegroundWindow`) behind a
-  cross-platform abstraction (Linux/macOS stubs ready to implement)
-- **Build:** CMake + Ninja (MinGW); packaged with windeployqt + Inno Setup
+**Ctrl+O** opens a link or file · **F2** edits · **Shift+Delete** deletes · **Esc** closes.
 
-## Build from source
-
-Requires Qt 6 (MinGW kit), CMake, and Ninja.
+Requires Qt 6 (MinGW kit, including SVG and Test), CMake, and Ninja on `PATH`.
 
 ```powershell
-# Configure (Release, Ninja)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.11.1/mingw_64"
-
-# Build
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/Qt/6.11.1/mingw_64"
 cmake --build build
-
-# Bundle the Qt runtime to run anywhere
-windeployqt --release --no-translations dist\ClipStream\ClipStream.exe
+ctest --test-dir build --output-on-failure
 ```
 
-CI builds and packages an installer on every push (see `.github/workflows/build.yml`).
+Tests use a temporary database and offscreen clipboard. UI screenshots are saved
+in `build/artifacts/`. See [Contributing](CONTRIBUTING.md) for development details.
 
-Run the regression suite with `ctest --test-dir build --output-on-failure` (Qt and
-MinGW runtime directories must be on `PATH`). Tests use a temporary database,
-an offscreen clipboard, and platform stubs; they do not access your clipboard
-history or send keystrokes to other apps. UI renders are saved under
-`build/artifacts/`. Pass `-DBUILD_TESTING=OFF` to build only the application.
+</details>
 
-## Project layout
+---
 
-```
-src/
-├─ main.cpp, theme.{h,cpp}, AppController.{h,cpp}
-├─ core/      ClipboardMonitor · Database (SQLite/FTS5) · ContentClassifier · MathEval
-├─ ui/        OverlayWindow · HistoryModel · EntryDelegate · SettingsDialog
-└─ platform/  HotkeyManager · ForegroundApp · PasteSimulator · Autostart
-              ├─ win/   (Windows implementations)
-              └─ stub/  (Linux/macOS placeholders)
-```
-
-## Author
-
-**Saqlain Abbas**
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/saqlainrazee/)
-[![GitHub](https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white)](https://github.com/razee4315)
-
-## License
-
-[MIT License](LICENSE) — feel free to use and modify.
-
-## Contributing
-
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+Made by [Saqlain Abbas](https://www.linkedin.com/in/saqlainrazee/) · [MIT](LICENSE) · [Changelog](CHANGELOG.md) · [Report a bug](https://github.com/Razee4315/clipstream/issues)
