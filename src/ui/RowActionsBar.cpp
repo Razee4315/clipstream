@@ -8,13 +8,13 @@
 #include <QToolButton>
 
 namespace {
-constexpr int kBtn = 28;
+constexpr int kBtn = 24;
 constexpr int kIcon = 16;
 } // namespace
 
 RowActionsBar::RowActionsBar(QWidget* parent) : QWidget(parent) {
     auto* row = new QHBoxLayout(this);
-    row->setContentsMargins(Theme::S1, Theme::S1, Theme::S1, Theme::S1);
+    row->setContentsMargins(2, 2, 2, 2);
     row->setSpacing(2);
 
     m_pin = makeButton(QStringLiteral("Pin"));
@@ -49,7 +49,7 @@ QToolButton* RowActionsBar::makeButton(const QString& tip) {
 
 int RowActionsBar::widthFor(bool editable) const {
     const int count = editable ? 4 : 3;
-    return count * kBtn + (count - 1) * 2 + 2 * Theme::S1;
+    return count * kBtn + (count - 1) * 2 + 4;
 }
 
 void RowActionsBar::configure(bool pinned, bool editable) {

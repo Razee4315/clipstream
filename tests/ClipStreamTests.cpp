@@ -3,6 +3,7 @@
 #include "core/ContentClassifier.h"
 #include "ui/OverlayWindow.h"
 #include "ui/HistoryModel.h"
+#include "ui/SettingsDialog.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -14,6 +15,9 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QListView>
+#include <QListWidget>
+#include <QMimeData>
+#include <QCheckBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -22,6 +26,8 @@
 #include <QTest>
 #include <QTimer>
 #include <QToolButton>
+#include <QTabWidget>
+#include <QComboBox>
 #include <memory>
 
 class ClipStreamTests : public QObject {
@@ -114,6 +120,85 @@ private slots:
         QCOMPARE(db->search(QStringLiteral("Recent")).size(), 2);
     }
 
+    void clearUnpinnedKeepsSnippets() {
+        const auto pinned = add(QStringLiteral("Keep this snippet"));
+        QVERIFY(db->togglePin(pinned));
+        add(QStringLiteral("Remove this history"));
+        db->clearHistory(false);
+        QCOMPARE(db->search(QString()).size(), 1);
+        QCOMPARE(db->search(QString()).first().id, pinned);
+        db->clearHistory(true);
+        QVERIFY(db->search(QString()).isEmpty());
+    }
+
+    void singleClickCopiesAndDismisses() {
+        add(QStringLiteral("Single click paste"));
+        OverlayWindow overlay(db.get(), nullptr);
+        QSignalSpy failed(&overlay, &OverlayWindow::pasteFailed);
+        overlay.showAtCursor();
+        QTest::qWait(150);
+        auto* list = overlay.findChild<QListView*>();
+        const auto rect = list->visualRect(list->model()->index(0, 0));
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, rect.topLeft() + QPoint(80, 16));
+        QVERIFY(!overlay.isVisible());
+        QCOMPARE(QApplication::clipboard()->text(), QStringLiteral("Single click paste"));
+        // Stub backend cannot target a real window: the failure must be reported.
+        QCOMPARE(failed.size(), 1);
+    }
+
+    void settingsPersistAndRender() {
+        OverlayWindow overlay(db.get(), nullptr);
+        QCOMPARE(overlay.width(), 452);
+        QCOMPARE(overlay.height(), 512);
+        SettingsDialog settings(db.get());
+        settings.show();
+        auto* size = settings.findChild<QComboBox*>(QStringLiteral("overlaySize"));
+        QVERIFY(size);
+        size->setCurrentIndex(1);
+        QCOMPARE(db->setting(QStringLiteral("overlay_size")), QStringLiteral("comfortable"));
+        overlay.applyTheme();
+        QCOMPARE(overlay.width(), 552);
+        size->setCurrentIndex(0);
+        auto* tabs = settings.findChild<QTabWidget*>();
+        QCOMPARE(tabs->count(), 3);
+        QDir().mkpath(QStringLiteral("artifacts"));
+        // Privacy with real content: a ticked box, a populated list, and Remove
+        // reachable without scrolling the page at the default size.
+        for (const char* app : {"KeePass.exe", "Bitwarden.exe", "1Password.exe", "LastPass.exe", "Dashlane.exe"})
+            db->addIgnoredApp(QString::fromLatin1(app));
+        SettingsDialog populated(db.get());
+        populated.show();
+        populated.findChild<QTabWidget*>()->setCurrentIndex(1);
+        auto* apps = populated.findChild<QListWidget*>();
+        auto* remove = populated.findChild<QPushButton*>(QStringLiteral("removeApp"));
+        QVERIFY(apps && remove);
+        QCOMPARE(apps->count(), 5);
+        QVERIFY(!remove->isEnabled());
+        apps->setCurrentRow(1);
+        QVERIFY(remove->isEnabled());
+        for (auto* box : populated.findChildren<QCheckBox*>())
+            if (box->text().startsWith(QStringLiteral("Skip"))) box->setChecked(true);
+        QTest::qWait(30);
+        QCOMPARE(remove->visibleRegion().boundingRect().size(), remove->size());
+        QCOMPARE(apps->visibleRegion().boundingRect().size(), apps->size());
+        QVERIFY(populated.grab().save(QStringLiteral("artifacts/settings-privacy.png")));
+        remove->click();
+        QCOMPARE(apps->count(), 4);
+        populated.close();
+        for (const QString& app : db->ignoredApps()) db->removeIgnoredApp(app);
+        db->setSetting(QStringLiteral("discard_sensitive"), QStringLiteral("0"));
+        for (int i = 0; i < tabs->count(); ++i) {
+            tabs->setCurrentIndex(i);
+            QTest::qWait(30);
+            QVERIFY(settings.grab().save(QStringLiteral("artifacts/settings-%1.png").arg(i)));
+        }
+        auto* theme = settings.findChild<QComboBox*>(QStringLiteral("themeChoice"));
+        theme->setCurrentIndex(theme->findData(QStringLiteral("light")));
+        tabs->setCurrentIndex(0);
+        QTest::qWait(30);
+        QVERIFY(settings.grab().save(QStringLiteral("artifacts/settings-light.png")));
+    }
+
     void capturePreservesWhitespaceAndPauseCancelsImages() {
         ClipboardMonitor monitor;
         QSignalSpy textSpy(&monitor, &ClipboardMonitor::textCaptured);
@@ -128,6 +213,30 @@ private slots:
         monitor.setPaused(true);
         QTest::qWait(280);
         QCOMPARE(imageSpy.size(), 0);
+    }
+
+    void clipsMarkedPrivateAreNotCaptured() {
+        ClipboardMonitor monitor;
+        QSignalSpy textSpy(&monitor, &ClipboardMonitor::textCaptured);
+        const auto format = [](const char* name) {
+            return QStringLiteral("application/x-qt-windows-mime;value=\"%1\"").arg(QLatin1String(name));
+        };
+        auto* secret = new QMimeData;
+        secret->setText(QStringLiteral("vault password"));
+        secret->setData(format("ExcludeClipboardContentFromMonitorProcessing"), QByteArray(1, '\0'));
+        QApplication::clipboard()->setMimeData(secret);
+        QTest::qWait(30);
+        auto* noHistory = new QMimeData;
+        noHistory->setText(QStringLiteral("another secret"));
+        noHistory->setData(format("CanIncludeInClipboardHistory"), QByteArray(4, '\0'));
+        QApplication::clipboard()->setMimeData(noHistory);
+        QTest::qWait(30);
+        auto* allowed = new QMimeData;
+        allowed->setText(QStringLiteral("ordinary text"));
+        allowed->setData(format("CanIncludeInClipboardHistory"), QByteArray::fromHex("01000000"));
+        QApplication::clipboard()->setMimeData(allowed);
+        QTRY_COMPARE(textSpy.size(), 1);
+        QCOMPARE(textSpy.first().first().toString(), QStringLiteral("ordinary text"));
     }
 
     void selectionSurvivesReloadAndPin() {

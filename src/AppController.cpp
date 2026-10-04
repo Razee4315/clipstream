@@ -43,6 +43,16 @@ bool AppController::initialize() {
     m_overlay = std::make_unique<OverlayWindow>(m_db.get(), m_monitor.get());
 
     setupTray();
+    connect(m_overlay.get(), &OverlayWindow::pasteFailed, this, [this] {
+        m_tray->showMessage(QStringLiteral("Clip copied"),
+            QStringLiteral("Could not paste automatically. Focus the destination and press Ctrl+V."),
+            QSystemTrayIcon::Information, 4000);
+    });
+    connect(m_overlay.get(), &OverlayWindow::clipboardBusy, this, [this] {
+        m_tray->showMessage(QStringLiteral("Clipboard is busy"),
+            QStringLiteral("Another app is using the clipboard, so nothing was copied or pasted. Please try again."),
+            QSystemTrayIcon::Warning, 4000);
+    });
     setupHotkey();
     connectCapture();
     maybeShowOnboarding();
@@ -153,6 +163,7 @@ void AppController::onTextCaptured(const QString& text, const QString& sourceApp
     e.type = ContentClassifier::classify(text);
     e.sensitive = sensitive;
     m_db->insertEntry(e);
+    applyRetention();
     m_overlay->reload();
 }
 
@@ -174,5 +185,13 @@ void AppController::onImageCaptured(const QImage& image, const QString& sourceAp
     e.type = ContentType::Image;
     e.imagePath = path;
     m_db->insertEntry(e);
+    applyRetention();
     m_overlay->reload();
+}
+
+void AppController::applyRetention() {
+    const auto paths = m_db->cleanup(
+        m_db->setting(QStringLiteral("retention_days"), QStringLiteral("30")).toInt(),
+        m_db->setting(QStringLiteral("max_entries"), QStringLiteral("1000")).toInt());
+    for (const QString& path : paths) QFile::remove(path);
 }

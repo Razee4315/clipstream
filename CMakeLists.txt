@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ClipStream VERSION 0.3.0 LANGUAGES CXX)
+project(ClipStream VERSION 0.3.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +23,7 @@ if(WIN32)
         src/platform/win/HotkeyManager_win.cpp
         src/platform/win/ForegroundApp_win.cpp
         src/platform/win/PasteSimulator_win.cpp
+        src/platform/win/PopupInput_win.cpp
         src/platform/win/Autostart_win.cpp
         resources/clipstream.rc
     )
@@ -31,6 +32,7 @@ else()
         src/platform/stub/HotkeyManager_stub.cpp
         src/platform/stub/ForegroundApp_stub.cpp
         src/platform/stub/PasteSimulator_stub.cpp
+            src/platform/stub/PopupInput_stub.cpp
         src/platform/stub/Autostart_stub.cpp
     )
 endif()
@@ -66,6 +68,7 @@ set(SOURCES
     src/ui/RowActionsBar.h
     # Listed so AUTOMOC processes the Q_OBJECT header whose impl lives in a
     # differently-named platform .cpp (HotkeyManager_win.cpp / _stub.cpp).
+    src/platform/PopupInput.h
     src/platform/HotkeyManager.h
     resources/app.qrc
     ${PLATFORM_SOURCES}
@@ -96,10 +99,19 @@ if(BUILD_TESTING)
             src/platform/stub/HotkeyManager_stub.cpp
             src/platform/stub/ForegroundApp_stub.cpp
             src/platform/stub/PasteSimulator_stub.cpp
+            src/platform/stub/PopupInput_stub.cpp
             src/platform/stub/Autostart_stub.cpp)
     endif()
     qt_add_executable(ClipStreamTests tests/ClipStreamTests.cpp ${TEST_SOURCES})
     target_include_directories(ClipStreamTests PRIVATE src)
     target_link_libraries(ClipStreamTests PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test)
     add_test(NAME ClipStreamTests COMMAND ClipStreamTests -platform offscreen)
+    if(WIN32)
+        set(DESKTOP_SOURCES ${SOURCES})
+        list(FILTER DESKTOP_SOURCES EXCLUDE REGEX "src/main.cpp|src/AppController")
+        qt_add_executable(ClipStreamDesktopCheck tests/DesktopCheck.cpp ${DESKTOP_SOURCES})
+        set_target_properties(ClipStreamDesktopCheck PROPERTIES EXCLUDE_FROM_ALL TRUE)
+        target_include_directories(ClipStreamDesktopCheck PRIVATE src resources)
+        target_link_libraries(ClipStreamDesktopCheck PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test user32)
+    endif()
 endif()

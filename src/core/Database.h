@@ -37,8 +37,8 @@ public:
     bool togglePin(qint64 id);
     bool removeEntry(qint64 id);
 
-    // Delete every entry (including pinned). Returns image paths to clean up.
-    QStringList clearHistory();
+    // Delete every entry, or only unpinned ones. Returns image paths to clean up.
+    QStringList clearHistory(bool includePinned = true);
 
     // Retention: drop unpinned rows older than maxAgeDays, then keep at most
     // maxEntries unpinned rows. Returns deleted image paths so the caller can

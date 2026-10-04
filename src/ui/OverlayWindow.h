@@ -1,8 +1,10 @@
 #pragma once
 
 #include "core/ClipEntry.h"
+#include "platform/PasteSimulator.h"
 
 #include <QWidget>
+#include <functional>
 
 class Database;
 class ClipboardMonitor;
@@ -18,6 +20,8 @@ class QPropertyAnimation;
 class QMenu;
 class QButtonGroup;
 class QPushButton;
+class PopupInput;
+class QClipboard;
 
 // The frameless launcher overlay: search box + history list + keyboard-driven
 // actions (paste, format-paste, pin, edit, delete, copy). Talks to the Database
@@ -37,6 +41,8 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void changeEvent(QEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
+    bool nativeEvent(const QByteArray& type, void* message, qintptr* result) override;
 
 private:
     enum class PasteFormat { Plain, Upper, Lower, Title, Trim };
@@ -59,6 +65,11 @@ private:
     void newSnippet();
     void previewCurrent();
     void updateCaptureState();
+    void activateForSearch();
+    void finishPaste();
+    bool writeClipboard(const std::function<void(QClipboard*)>& write);
+    void hideIfAbandoned();
+    void resizeOverlay();
     void runPrimarySmartAction();
     void addSmartActions(QMenu& menu, const ClipEntry& entry);
 
@@ -88,4 +99,11 @@ private:
     QToolButton* m_newBtn = nullptr;
     QPushButton* m_previewBtn = nullptr;
     bool m_childDialogOpen = false;
+    bool m_browsingWithoutFocus = false;
+    bool m_pasting = false;
+    platform::PasteTarget m_pasteTarget;
+    PopupInput* m_popupInput = nullptr;
+signals:
+    void pasteFailed();
+    void clipboardBusy();
 };

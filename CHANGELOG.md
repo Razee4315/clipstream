@@ -2,6 +2,31 @@
 
 All notable changes to ClipStream.
 
+## [0.3.1] - 2026-10-05
+
+### Changed
+- Smaller popup (420 × 480) with tighter rows; a Comfortable size is available in Settings
+- The popup opens without taking focus, so the original app keeps its selection
+- A single click pastes a clip; row actions moved below the title
+- Settings reorganised into General, Privacy, and History tabs; changes save automatically
+
+### Added
+- Clear unpinned history, separate from the destructive Delete everything
+- Clips that password managers mark as private are not captured
+- A tray notice when a clip could not be pasted automatically (it stays copied)
+- Optional Windows desktop check for real focus and paste behaviour
+
+### Fixed
+- A busy clipboard could make ClipStream paste the previous clipboard content instead of
+  the chosen clip; the write is now confirmed and retried, and nothing is pasted if it fails
+- Pasting returns to the original window and control after searching or opening Settings
+- Paste waits for Ctrl/Shift/Alt to be released and never sends to a different window
+- Pasting into an administrator window reports a failure instead of silently doing nothing
+- History limits apply as clips arrive, not only at startup
+- A second copy of ClipStream no longer starts alongside the first
+- The popup no longer lingers when a menu is dismissed by switching apps
+- Captured text no longer picks up a stray trailing NUL when the clipboard is busy
+
 ## [0.3.0] - 2026-10-04
 
 ### Added

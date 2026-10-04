@@ -266,16 +266,17 @@ bool Database::removeEntry(qint64 id) {
     return q.exec();
 }
 
-QStringList Database::clearHistory() {
+QStringList Database::clearHistory(bool includePinned) {
+    const QString condition = includePinned ? QString() : QStringLiteral(" WHERE is_pinned = 0");
     QStringList images;
     QSqlQuery img(m_db);
-    if (img.exec(QStringLiteral("SELECT image_path FROM clipboard_history WHERE image_path IS NOT NULL")))
+    if (img.exec(QStringLiteral("SELECT image_path FROM clipboard_history") + condition))
         while (img.next())
             if (const QString p = img.value(0).toString(); !p.isEmpty())
                 images << p;
 
     QSqlQuery q(m_db);
-    q.exec(QStringLiteral("DELETE FROM clipboard_history"));
+    if (!q.exec(QStringLiteral("DELETE FROM clipboard_history") + condition)) return {};
     return images;
 }
 

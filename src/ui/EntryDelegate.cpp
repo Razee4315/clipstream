@@ -174,7 +174,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     }
 
     // Only the selected row needs room for inline actions.
-    const int rightLimit = full.right() - (selected ? Theme::ActionsReserve : 38);
+    const int rightLimit = full.right() - (selected ? 12 : 28);
     const int textLeft = badgeRect.right() + Theme::S3;
     const QRect textArea(textLeft, full.top(), rightLimit - textLeft, full.height());
 
@@ -189,7 +189,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     painter->setFont(titleFont);
     painter->setPen(QColor(e.sensitive ? pal.textMuted : pal.textPrimary));
     const QFontMetrics tfm(titleFont);
-    painter->drawText(QRect(textArea.left(), textArea.top() + 14, textArea.width(), tfm.height()),
+    painter->drawText(QRect(textArea.left(), textArea.top() + 8, textArea.width(), tfm.height()),
                       Qt::AlignLeft | Qt::AlignVCenter,
                       tfm.elidedText(title, Qt::ElideRight, textArea.width()));
 
@@ -200,8 +200,9 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const QString meta = (e.pinned ? QStringLiteral("Pinned  ·  ") : QString())
         + appDisplayName(e.sourceApp) + QStringLiteral("  ·  ") + relativeTime(e.createdAt);
     const QFontMetrics mfm(metaFont);
-    painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 12, textArea.width(), mfm.height()),
-                      Qt::AlignLeft | Qt::AlignVCenter, mfm.elidedText(meta, Qt::ElideRight, textArea.width()));
+    const int metaWidth = textArea.width() - (selected ? Theme::ActionsReserve : 0);
+    painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 9, metaWidth, mfm.height()),
+                      Qt::AlignLeft | Qt::AlignVCenter, mfm.elidedText(meta, Qt::ElideRight, metaWidth));
 
     if (!selected && index.row() < 9) {
         painter->setPen(QColor(pal.textMuted));

@@ -5,6 +5,7 @@
 #include "core/Database.h"
 #include "core/MathEval.h"
 #include "platform/PasteSimulator.h"
+#include "platform/PopupInput.h"
 #include "theme.h"
 #include "ui/EntryDelegate.h"
 #include "ui/HistoryModel.h"
@@ -43,6 +44,7 @@
 #include <QPropertyAnimation>
 #include <QScreen>
 #include <QScrollBar>
+#include <QThread>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
@@ -82,6 +84,16 @@ OverlayWindow::OverlayWindow(Database* db, ClipboardMonitor* monitor, QWidget* p
     setWindowTitle(QStringLiteral("ClipStream"));
     setWindowFlags(Qt::FramelessWindowHint | Qt::Tool | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_ShowWithoutActivating);
+    m_popupInput = new PopupInput(this);
+    connect(m_popupInput, &PopupInput::shortcut, this, [this](int key, Qt::KeyboardModifiers mods) {
+        if (!isVisible() || !m_browsingWithoutFocus) return;
+        QKeyEvent event(QEvent::KeyPress, key, mods);
+        QApplication::sendEvent(m_search, &event);
+    });
+    connect(m_popupInput, &PopupInput::dismissRequested, this, [this] {
+        if (!m_childDialogOpen) hide();
+    });
     buildUi();
 }
 
@@ -109,8 +121,8 @@ void OverlayWindow::buildUi() {
     brand->setObjectName(QStringLiteral("brand"));
     auto* mark = new QLabel(m_card);
     mark->setObjectName(QStringLiteral("brandMark"));
-    mark->setPixmap(QPixmap(QStringLiteral(":/icon.png")).scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    mark->setFixedSize(36, 36);
+    mark->setPixmap(QPixmap(QStringLiteral(":/icon.png")).scaled(28, 28, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    mark->setFixedSize(28, 28);
     mark->setAlignment(Qt::AlignCenter);
     header->addWidget(mark);
     header->addSpacing(4);
@@ -138,11 +150,6 @@ void OverlayWindow::buildUi() {
     connect(m_settingsBtn, &QToolButton::clicked, this, &OverlayWindow::openSettings);
     header->addWidget(m_settingsBtn);
     col->addLayout(header);
-    auto* subtitle = new QLabel(QStringLiteral("A little less searching. A lot more doing."), m_card);
-    subtitle->setObjectName(QStringLiteral("subtitle"));
-    col->addWidget(subtitle);
-    col->addSpacing(Theme::S2);
-
     auto* searchRow = new QHBoxLayout();
     m_searchIcon = new QLabel(m_card);
     m_searchIcon->setFixedSize(20, 20);
@@ -152,7 +159,7 @@ void OverlayWindow::buildUi() {
     m_search->setPlaceholderText(QStringLiteral("Search clips or apps…"));
     m_search->setAccessibleName(QStringLiteral("Search clipboard"));
     m_search->setClearButtonEnabled(true);
-    m_search->setMinimumHeight(28);
+    m_search->setMinimumHeight(22);
     m_search->installEventFilter(this);
     searchRow->addWidget(m_search, 1);
     col->addLayout(searchRow);
@@ -216,7 +223,7 @@ void OverlayWindow::buildUi() {
     m_list->installEventFilter(this);
     col->addWidget(m_list, 1);
 
-    connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
+    connect(m_list, &QListView::clicked, this, [this](const QModelIndex&) { pasteCurrent(); });
     connect(m_list, &QListView::customContextMenuRequested, this,
             [this](const QPoint& pos) {
                 const QModelIndex index = m_list->indexAt(pos);
@@ -256,7 +263,7 @@ void OverlayWindow::buildUi() {
     col->addWidget(m_empty, 1);
 
     auto* footerRow = new QHBoxLayout();
-    auto* footer = new QLabel(QStringLiteral("↑↓ Navigate    Enter Paste    Ctrl+1–9 Quick paste"), m_card);
+    auto* footer = new QLabel(QStringLiteral("Click to paste · Ctrl+F Search"), m_card);
     footer->setObjectName(QStringLiteral("footer"));
     footerRow->addWidget(footer);
     footerRow->addStretch();
@@ -286,11 +293,11 @@ void OverlayWindow::applyTheme() {
     QString css = QStringLiteral(
         "QWidget { color:@text; }"
         "#card { background:@surface; border:1px solid @border; border-radius:18px; }"
-        "#brand { font-size:20px; font-weight:700; letter-spacing:-0.5px; }"
+        "#brand { font-size:17px; font-weight:700; letter-spacing:-0.5px; }"
         "#brandMark { background:transparent; }"
         "#subtitle, #emptyHint { color:@muted; font-size:12px; }"
         "#search { background:@alt; border:1px solid @border; border-radius:10px;"
-        " padding:8px 12px; font-size:14px; selection-background-color:@accent; }"
+        " padding:6px 10px; font-size:13px; selection-background-color:@accent; }"
         "#search:focus { border-color:@accent; }"
         "#count { color:@muted; font-size:11px; font-weight:600; padding:4px 0; }"
         "QToolButton, QPushButton { background:transparent; border:1px solid transparent;"
@@ -298,7 +305,7 @@ void OverlayWindow::applyTheme() {
         "QToolButton:hover, QPushButton:hover { background:@alt; }"
         "#iconBtn { padding:0; }"
         "QToolButton:focus, QPushButton:focus { border-color:@accent; }"
-        "#filter { color:@muted; font-size:12px; padding:7px 12px; }"
+        "#filter { color:@muted; font-size:12px; padding:5px 9px; }"
         "#filter:checked { color:@text; background:@alt; border:1px solid @border; font-weight:600; }"
         "#capture { color:@accent; font-size:11px; background:@alt; }"
         "#newSnippet { color:@accent; font-size:12px; }"
@@ -328,6 +335,7 @@ void OverlayWindow::applyTheme() {
     m_emptyIcon->setPixmap(IconFactory::pixmap(QStringLiteral("search"), QColor(p.accent), 36));
     m_newBtn->setIcon(IconFactory::icon(QStringLiteral("plus"), QColor(p.accent), 14));
     updateCaptureState();
+    resizeOverlay();
 
     // Themed icons (recoloured per palette).
     if (m_searchIcon)
@@ -390,7 +398,35 @@ const ClipEntry* OverlayWindow::currentEntry() const {
     return m_model->isValidRow(row) ? &m_model->entryAt(row) : nullptr;
 }
 
+void OverlayWindow::resizeOverlay() {
+    const bool comfortable = m_db->setting(QStringLiteral("overlay_size")) == QLatin1String("comfortable");
+    const QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    const QSize available = screen->availableGeometry().size();
+    setFixedSize(qMin((comfortable ? 520 : Theme::OverlayWidth) + 2 * Theme::ShadowMargin, available.width()),
+                 qMin((comfortable ? 600 : Theme::OverlayHeight) + 2 * Theme::ShadowMargin, available.height()));
+    if (isVisible()) { // switching size in Settings must not push the popup off screen
+        const QRect area = screen->availableGeometry();
+        move(qBound(area.left(), x(), qMax(area.left(), area.right() - width() + 1)),
+             qBound(area.top(), y(), qMax(area.top(), area.bottom() - height() + 1)));
+    }
+    QTimer::singleShot(0, this, &OverlayWindow::positionActionsBar);
+}
+
+void OverlayWindow::activateForSearch() {
+    m_popupInput->stop();
+    m_browsingWithoutFocus = false;
+    platform::setPopupNonActivating(winId(), false);
+    activateWindow();
+    m_search->setFocus();
+    hideIfAbandoned();
+}
+
 void OverlayWindow::showAtCursor() {
+    if (m_pasting) return;
+    m_pasteTarget = platform::capturePasteTarget();
+    m_browsingWithoutFocus = m_pasteTarget.window != 0;
+    platform::setPopupNonActivating(winId(), m_browsingWithoutFocus);
     m_search->clear();          // textChanged → reload() with full history
     reload();
     selectRow(0);
@@ -401,8 +437,7 @@ void OverlayWindow::showAtCursor() {
         screen = QGuiApplication::primaryScreen();
     const QRect area = screen->availableGeometry();
 
-    setFixedSize(qMin(Theme::OverlayWidth + 2 * Theme::ShadowMargin, area.width()),
-                 qMin(Theme::OverlayHeight + 2 * Theme::ShadowMargin, area.height()));
+    resizeOverlay();
     int x = cursor.x() - width() / 2;
     int y = cursor.y() + 12;
     x = qBound(area.left(), x, area.right() - width() + 1);
@@ -414,8 +449,8 @@ void OverlayWindow::showAtCursor() {
     setWindowOpacity(0.0); // fade in from transparent
     show();
     raise();
-    activateWindow();
-    m_search->setFocus();
+    if (m_browsingWithoutFocus) m_popupInput->start(this, m_pasteTarget);
+    else activateForSearch();
     m_fade->start();
     // The list lays out during show(); reposition the action bar once geometry
     // is final, otherwise it lands in the wrong spot on the very first open.
@@ -423,22 +458,54 @@ void OverlayWindow::showAtCursor() {
 }
 
 void OverlayWindow::toggleAtCursor() {
+    // A settings/edit dialog owns the interaction; bring it forward instead of
+    // hiding or re-targeting the popup underneath it.
+    if (QWidget* modal = QApplication::activeModalWidget()) {
+        modal->raise();
+        modal->activateWindow();
+        return;
+    }
+    if (QWidget* popup = QApplication::activePopupWidget())
+        popup->close();
     if (isVisible())
         hide();
     else
         showAtCursor();
 }
 
-bool OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
+// A menu closes when another app takes focus, and activation can be refused;
+// either way an inactive popup with no destination must not linger on screen.
+void OverlayWindow::hideIfAbandoned() {
+    QTimer::singleShot(250, this, [this] {
+        if (isVisible() && !m_browsingWithoutFocus && !m_childDialogOpen && !m_pasting
+            && !isActiveWindow() && !QApplication::activePopupWidget())
+            hide();
+    });
+}
+
+// Another app can hold the clipboard open for a moment, and the write is then
+// dropped without an error. Pasting after that would insert the previous
+// clipboard content, so confirm the write landed and retry briefly if not.
+bool OverlayWindow::writeClipboard(const std::function<void(QClipboard*)>& write) {
     QClipboard* cb = QApplication::clipboard();
+    for (int attempt = 0; attempt < 6; ++attempt) {
+        if (attempt) QThread::msleep(25);
+        if (m_monitor) m_monitor->ignoreNextChange();
+        write(cb);
+        if (platform::ownsClipboard()) return true;
+    }
+    if (m_monitor) m_monitor->ignoreNextChange(false); // nothing changed, so nothing to skip
+    emit clipboardBusy();
+    return false;
+}
+
+bool OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
     if (entry.isImage()) {
         const QImage img(entry.imagePath);
-        if (!img.isNull()) {
-            if (m_monitor) m_monitor->ignoreNextChange();
-            cb->setImage(img);
-            return true;
-        }
+        if (!img.isNull())
+            return writeClipboard([&img](QClipboard* cb) { cb->setImage(img); });
         QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+        activateForSearch();
         QMessageBox::information(this, QStringLiteral("Image unavailable"),
             QStringLiteral("This image is no longer available on disk. Copy it again to add it to your history."));
         return false;
@@ -452,20 +519,28 @@ bool OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
         case PasteFormat::Trim:  text = text.trimmed();   break;
         case PasteFormat::Plain: break;
     }
-    if (m_monitor) m_monitor->ignoreNextChange();
-    cb->setText(text);
-    return true;
+    return writeClipboard([&text](QClipboard* cb) { cb->setText(text); });
 }
 
 void OverlayWindow::pasteCurrent(PasteFormat format) {
     const ClipEntry* e = currentEntry();
-    if (!e)
+    if (!e || m_pasting)
         return;
     const ClipEntry entry = *e;
     if (!putOnClipboard(entry, format)) return;
+    finishPaste();
+}
+
+void OverlayWindow::finishPaste() {
+    if (m_pasting) return;
+    m_pasting = true;
+    // Hand focus back while we still own it; Windows always allows that.
+    if (isActiveWindow()) platform::restorePasteTarget(m_pasteTarget);
     hide();
-    // Let focus return to the previously active window before sending Ctrl+V.
-    QTimer::singleShot(80, [] { platform::simulatePaste(); });
+    platform::pasteToTarget(m_pasteTarget, this, [this](bool ok) {
+        m_pasting = false;
+        if (!ok) emit pasteFailed();
+    });
 }
 
 void OverlayWindow::copyCurrent() {
@@ -492,6 +567,7 @@ void OverlayWindow::editCurrent() {
         return;
     const qint64 id = e->id;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     bool ok = false;
     const QString text = QInputDialog::getMultiLineText(
         this, QStringLiteral("Edit clip"), QStringLiteral("Content:"), e->content, &ok);
@@ -520,6 +596,7 @@ void OverlayWindow::showFormatMenu() {
     if (!hasSelection() || currentEntry()->isImage())
         return;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     QMenu menu(this);
     menu.addAction(QStringLiteral("Plain"),  [this] { pasteCurrent(PasteFormat::Plain); });
     menu.addAction(QStringLiteral("UPPERCASE"), [this] { pasteCurrent(PasteFormat::Upper); });
@@ -528,6 +605,7 @@ void OverlayWindow::showFormatMenu() {
     menu.addAction(QStringLiteral("Trim whitespace"), [this] { pasteCurrent(PasteFormat::Trim); });
     const QRect r = m_list->visualRect(m_list->currentIndex());
     menu.exec(m_list->viewport()->mapToGlobal(r.bottomLeft()));
+    hideIfAbandoned();
 }
 
 void OverlayWindow::showContextMenu(const QPoint& globalPos) {
@@ -535,6 +613,7 @@ void OverlayWindow::showContextMenu(const QPoint& globalPos) {
     if (!e)
         return;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     QMenu menu(this);
     addSmartActions(menu, *e); // type-specific actions first, if any
     menu.addAction(QStringLiteral("Preview   Ctrl+Space"), [this] { previewCurrent(); });
@@ -547,6 +626,7 @@ void OverlayWindow::showContextMenu(const QPoint& globalPos) {
     menu.addSeparator();
     menu.addAction(QStringLiteral("Delete"), [this] { deleteCurrent(); });
     menu.exec(globalPos);
+    hideIfAbandoned();
 }
 
 // Adds context-menu entries that only make sense for this clip's type:
@@ -589,11 +669,8 @@ void OverlayWindow::addSmartActions(QMenu& menu, const ClipEntry& entry) {
     if (const auto result = MathEval::evaluate(entry.content)) {
         const QString text = QString::number(*result, 'g', 12);
         menu.addAction(QStringLiteral("Paste result = %1").arg(text), [this, text] {
-            hide();
-            if (m_monitor)
-                m_monitor->ignoreNextChange();
-            QApplication::clipboard()->setText(text);
-            QTimer::singleShot(80, [] { platform::simulatePaste(); });
+            if (writeClipboard([&text](QClipboard* cb) { cb->setText(text); }))
+                finishPaste();
         });
         added = true;
     }
@@ -618,13 +695,12 @@ void OverlayWindow::runPrimarySmartAction() {
 }
 
 void OverlayWindow::copyRawText(const QString& text) {
-    if (m_monitor)
-        m_monitor->ignoreNextChange();
-    QApplication::clipboard()->setText(text);
+    writeClipboard([&text](QClipboard* cb) { cb->setText(text); });
 }
 
 void OverlayWindow::newSnippet() {
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     bool ok = false;
     const QString text = QInputDialog::getMultiLineText(
         this, QStringLiteral("New snippet"),
@@ -652,6 +728,7 @@ void OverlayWindow::previewCurrent() {
     if (!currentEntry()) return;
     const ClipEntry entry = *currentEntry();
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("Clip preview"));
     dialog.resize(560, 440);
@@ -718,9 +795,9 @@ void OverlayWindow::positionActionsBar() {
 
     m_actions->configure(e->pinned, !e->isImage());
     const int barW = m_actions->widthFor(!e->isImage());
-    const int barH = 36;
+    const int barH = 28;
     const int x = rect.right() - Theme::S2 - barW;
-    const int y = rect.top() + (rect.height() - barH) / 2;
+    const int y = rect.bottom() - barH - 4;
     m_actions->setGeometry(x, y, barW, barH);
     m_actions->show();
     m_actions->raise();
@@ -728,6 +805,7 @@ void OverlayWindow::positionActionsBar() {
 
 void OverlayWindow::openSettings() {
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    activateForSearch();
     SettingsDialog dlg(m_db, this);
     connect(&dlg, &SettingsDialog::pauseToggled, this,
             [this](bool paused) { if (m_monitor) m_monitor->setPaused(paused); });
@@ -744,6 +822,8 @@ void OverlayWindow::openSettings() {
 }
 
 bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == m_search && event->type() == QEvent::MouseButtonPress)
+        activateForSearch();
     if ((watched == m_search || watched == m_list) && event->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(event);
         const int key = ke->key();
@@ -761,7 +841,7 @@ bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
 
         if (mods & Qt::ControlModifier) {
             if (key == Qt::Key_Space) { previewCurrent(); return true; }
-            if (key == Qt::Key_F) { m_search->setFocus(); m_search->selectAll(); return true; }
+            if (key == Qt::Key_F) { activateForSearch(); m_search->selectAll(); return true; }
             if (key == Qt::Key_P) { pinCurrent(); return true; }
             if (key == Qt::Key_O) { runPrimarySmartAction(); return true; } // open url/file
             if (key == Qt::Key_N) { newSnippet(); return true; }           // new snippet
@@ -812,7 +892,19 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event) {
 
 void OverlayWindow::changeEvent(QEvent* event) {
     if (event->type() == QEvent::ActivationChange && isVisible() && !isActiveWindow()
-        && !m_childDialogOpen && !QApplication::activePopupWidget())
+        && !m_browsingWithoutFocus && !m_childDialogOpen && !QApplication::activePopupWidget())
         hide();
     QWidget::changeEvent(event);
+}
+
+bool OverlayWindow::nativeEvent(const QByteArray& type, void* message, qintptr* result) {
+    if (platform::handlePopupNativeEvent(message, result)) return true;
+    return QWidget::nativeEvent(type, message, result);
+}
+
+void OverlayWindow::hideEvent(QHideEvent* event) {
+    m_popupInput->stop();
+    // Only restore focus when we owned it, never on an outside click.
+    if (isActiveWindow()) platform::restorePasteTarget(m_pasteTarget);
+    QWidget::hideEvent(event);
 }

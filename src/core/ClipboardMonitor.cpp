@@ -6,8 +6,24 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QTimer>
+#include <QtEndian>
 
 namespace {
+
+// Password managers flag secrets with these Windows clipboard formats so that
+// clipboard managers leave them alone.
+bool excludedFromHistory(const QMimeData* mime) {
+    const auto format = [](const char* name) {
+        return QStringLiteral("application/x-qt-windows-mime;value=\"%1\"").arg(QLatin1String(name));
+    };
+    if (mime->hasFormat(format("ExcludeClipboardContentFromMonitorProcessing")))
+        return true;
+    const QString history = format("CanIncludeInClipboardHistory");
+    if (!mime->hasFormat(history))
+        return false;
+    const QByteArray value = mime->data(history);
+    return value.size() >= 4 && qFromLittleEndian<quint32>(value.constData()) == 0;
+}
 
 // Cheap content hash so multiple dataChanged signals for the same screenshot
 // (Windows fires several) collapse to one captured entry.
@@ -72,7 +88,7 @@ void ClipboardMonitor::handleChange() {
         return;
 
     const QMimeData* mime = m_clipboard->mimeData();
-    if (!mime)
+    if (!mime || excludedFromHistory(mime))
         return;
 
     // The app that owns the foreground window right now is the one that copied.
@@ -95,7 +111,10 @@ void ClipboardMonitor::handleChange() {
         m_imageDebounce->stop();
         m_pendingImage = QImage();
         m_pendingSource.clear();
-        const QString text = mime->text();
+        QString text = mime->text();
+        // A busy clipboard can hand the text over with its terminator attached.
+        while (text.endsWith(QChar(u'\0')))
+            text.chop(1);
         if (text.trimmed().isEmpty() || text == m_lastText)
             return; // ignore blanks and repeats of the last text we saw
         m_lastText = text;

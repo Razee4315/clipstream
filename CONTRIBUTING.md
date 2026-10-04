@@ -22,6 +22,36 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## Tests
+
+`ctest` runs `ClipStreamTests` on Qt's offscreen platform with a temporary database.
+It links the stub platform backends, so it never sends real keystrokes: it covers
+search, retention, capture rules, and UI rendering, and saves screenshots to
+`build/artifacts/`. It cannot prove that a paste reaches another application.
+
+Focus and paste are covered by an optional Windows-only target that links the real
+Win32 backend and drives a separate scratch-editor process:
+
+```powershell
+cmake --build build --target ClipStreamDesktopCheck
+./build/ClipStreamDesktopCheck.exe --verify
+```
+
+Run it from an interactive, unlocked desktop session and keep your hands off the
+keyboard and mouse for the ten seconds it takes. It opens a small editor window,
+takes the foreground, sends real key and mouse input, writes to the clipboard, and
+then restores your previous clipboard and foreground window. It waits for input to
+be idle before starting and only sends keys while its own editor is in front, but
+anything you type during the run lands in that editor and fails the test. It is not
+built by default and does not run in CI. Results go to
+`build/artifacts/windows-paste-results.xml`; the `OleSetClipboard: Failed` warnings
+there come from the test that deliberately holds the clipboard open.
+
+The scratch editor is a plain Win32 edit control. A pass there does not prove
+every application behaves the same, so test changes to `src/platform/win/` in a
+few real apps as well. Running `ClipStreamDesktopCheck.exe` with no arguments opens
+a manual playground with temporary history.
+
 ## Guidelines
 
 - Keep code clean and simple

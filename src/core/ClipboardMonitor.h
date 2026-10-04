@@ -20,7 +20,7 @@ public:
 
     // Call right before we set the clipboard ourselves (e.g. paste/copy actions)
     // so the resulting change isn't captured back as a new clip.
-    void ignoreNextChange() { m_ignoreNext = true; }
+    void ignoreNextChange(bool ignore = true) { m_ignoreNext = ignore; }
 
 signals:
     void textCaptured(const QString& text, const QString& sourceApp);
