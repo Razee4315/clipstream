@@ -13,6 +13,14 @@
 #include "ui/SettingsDialog.h"
 
 #include <QApplication>
+#include <QButtonGroup>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QScopedValueRollback>
+#include <QMessageBox>
 #include <QClipboard>
 #include <QColor>
 #include <QCursor>
@@ -93,45 +101,106 @@ void OverlayWindow::buildUi() {
     m_card->setGraphicsEffect(shadow);
 
     auto* col = new QVBoxLayout(m_card);
-    col->setContentsMargins(Theme::S3, Theme::S3, Theme::S3, Theme::S2);
+    col->setContentsMargins(Theme::S4, Theme::S4, Theme::S4, Theme::S3);
     col->setSpacing(Theme::S2);
 
-    // --- Search row -----------------------------------------------------------
-    auto* searchRow = new QHBoxLayout();
-    searchRow->setSpacing(Theme::S2);
+    auto* header = new QHBoxLayout();
+    auto* brand = new QLabel(QStringLiteral("ClipStream"), m_card);
+    brand->setObjectName(QStringLiteral("brand"));
+    auto* mark = new QLabel(m_card);
+    mark->setObjectName(QStringLiteral("brandMark"));
+    mark->setPixmap(IconFactory::pixmap(QStringLiteral("copy"), QColor("#ffffff"), 20));
+    mark->setFixedSize(36, 36);
+    mark->setAlignment(Qt::AlignCenter);
+    header->addWidget(mark);
+    header->addSpacing(4);
+    header->addWidget(brand);
+    header->addStretch();
 
-    m_searchIcon = new QLabel(m_card);
-    m_searchIcon->setFixedSize(18, 18);
-    searchRow->addWidget(m_searchIcon);
-
-    m_search = new QLineEdit(m_card);
-    m_search->setObjectName(QStringLiteral("search"));
-    m_search->setPlaceholderText(QStringLiteral("Search clipboard…"));
-    m_search->setClearButtonEnabled(true);
-    m_search->installEventFilter(this);
-    searchRow->addWidget(m_search, 1);
-
-    m_count = new QLabel(QStringLiteral("0"), m_card);
-    m_count->setObjectName(QStringLiteral("count"));
-    searchRow->addWidget(m_count);
-
+    m_pauseBtn = new QToolButton(m_card);
+    m_pauseBtn->setObjectName(QStringLiteral("capture"));
+    m_pauseBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_pauseBtn, &QToolButton::clicked, this, [this] {
+        if (!m_monitor) return;
+        const bool paused = !m_monitor->isPaused();
+        m_monitor->setPaused(paused);
+        m_db->setSetting(QStringLiteral("paused"), paused ? QStringLiteral("1") : QStringLiteral("0"));
+        updateCaptureState();
+    });
+    header->addWidget(m_pauseBtn);
     m_settingsBtn = new QToolButton(m_card);
     m_settingsBtn->setObjectName(QStringLiteral("iconBtn"));
     m_settingsBtn->setCursor(Qt::PointingHandCursor);
-    m_settingsBtn->setFocusPolicy(Qt::NoFocus);
-    m_settingsBtn->setFixedSize(28, 28);
-    m_settingsBtn->setIconSize(QSize(16, 16));
+    m_settingsBtn->setFixedSize(32, 32);
+    m_settingsBtn->setIconSize(QSize(18, 18));
     m_settingsBtn->setToolTip(QStringLiteral("Settings"));
+    m_settingsBtn->setAccessibleName(QStringLiteral("Settings"));
     connect(m_settingsBtn, &QToolButton::clicked, this, &OverlayWindow::openSettings);
-    searchRow->addWidget(m_settingsBtn);
+    header->addWidget(m_settingsBtn);
+    col->addLayout(header);
+    auto* subtitle = new QLabel(QStringLiteral("A little less searching. A lot more doing."), m_card);
+    subtitle->setObjectName(QStringLiteral("subtitle"));
+    col->addWidget(subtitle);
+    col->addSpacing(Theme::S2);
 
+    auto* searchRow = new QHBoxLayout();
+    m_searchIcon = new QLabel(m_card);
+    m_searchIcon->setFixedSize(20, 20);
+    searchRow->addWidget(m_searchIcon);
+    m_search = new QLineEdit(m_card);
+    m_search->setObjectName(QStringLiteral("search"));
+    m_search->setPlaceholderText(QStringLiteral("Search clips or apps…"));
+    m_search->setAccessibleName(QStringLiteral("Search clipboard"));
+    m_search->setClearButtonEnabled(true);
+    m_search->setMinimumHeight(28);
+    m_search->installEventFilter(this);
+    searchRow->addWidget(m_search, 1);
     col->addLayout(searchRow);
+
+    auto* filterRow = new QHBoxLayout();
+    filterRow->setSpacing(4);
+    m_filters = new QButtonGroup(this);
+    const QStringList labels = {QStringLiteral("All clips"), QStringLiteral("Pinned"),
+        QStringLiteral("Text"), QStringLiteral("Images"), QStringLiteral("Links")};
+    for (int i = 0; i < labels.size(); ++i) {
+        auto* button = new QPushButton(labels[i], m_card);
+        button->setObjectName(QStringLiteral("filter"));
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        m_filters->addButton(button, i);
+        filterRow->addWidget(button);
+    }
+    m_filters->button(0)->setChecked(true);
+    filterRow->addStretch();
+    connect(m_filters, &QButtonGroup::idClicked, this, [this](int id) {
+        m_filter = static_cast<ClipFilter>(id);
+        reload();
+        selectRow(0);
+        m_search->setFocus();
+    });
+    col->addLayout(filterRow);
+
+    auto* section = new QHBoxLayout();
+    m_count = new QLabel(m_card);
+    m_count->setObjectName(QStringLiteral("count"));
+    section->addWidget(m_count);
+    section->addStretch();
+    m_newBtn = new QToolButton(m_card);
+    m_newBtn->setObjectName(QStringLiteral("newSnippet"));
+    m_newBtn->setText(QStringLiteral("New snippet"));
+    m_newBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_newBtn->setToolTip(QStringLiteral("Save reusable text · Ctrl+N"));
+    m_newBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_newBtn, &QToolButton::clicked, this, &OverlayWindow::newSnippet);
+    section->addWidget(m_newBtn);
+    col->addLayout(section);
 
     // --- History list ---------------------------------------------------------
     m_model = new HistoryModel(this);
     m_delegate = new EntryDelegate(this);
     m_list = new QListView(m_card);
     m_list->setObjectName(QStringLiteral("list"));
+    m_list->setAccessibleName(QStringLiteral("Clipboard history"));
     m_list->setModel(m_model);
     m_list->setItemDelegate(m_delegate);
     m_list->setFrameShape(QFrame::NoFrame);
@@ -149,13 +218,12 @@ void OverlayWindow::buildUi() {
 
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex&) { pasteCurrent(); });
     connect(m_list, &QListView::customContextMenuRequested, this,
-            [this](const QPoint& pos) { showContextMenu(m_list->viewport()->mapToGlobal(pos)); });
-    // Hovering a row selects it, so the action buttons appear on hover.
-    connect(m_list, &QListView::entered, this, [this](const QModelIndex& idx) {
-        if (idx.isValid())
-            m_list->setCurrentIndex(idx);
-    });
-
+            [this](const QPoint& pos) {
+                const QModelIndex index = m_list->indexAt(pos);
+                if (!index.isValid()) return;
+                m_list->setCurrentIndex(index);
+                showContextMenu(m_list->viewport()->mapToGlobal(pos));
+            });
     // Floating action bar over the selected row (pin/copy/edit/delete).
     m_actions = new RowActionsBar(m_list->viewport());
     m_actions->hide();
@@ -168,14 +236,38 @@ void OverlayWindow::buildUi() {
     connect(m_list->verticalScrollBar(), &QScrollBar::valueChanged, this,
             [this] { positionActionsBar(); });
 
-    // --- Footer hints ---------------------------------------------------------
-    auto* footer = new QLabel(
-        QStringLiteral("↑↓ Move     ⏎ Paste     Ctrl+N New     Esc Close"), m_card);
-    footer->setObjectName(QStringLiteral("footer"));
-    footer->setAlignment(Qt::AlignCenter);
-    col->addWidget(footer);
+    m_empty = new QWidget(m_card);
+    auto* emptyLayout = new QVBoxLayout(m_empty);
+    emptyLayout->addStretch();
+    m_emptyIcon = new QLabel(m_empty);
+    m_emptyIcon->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(m_emptyIcon);
+    m_emptyTitle = new QLabel(m_empty);
+    m_emptyTitle->setObjectName(QStringLiteral("emptyTitle"));
+    m_emptyTitle->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(m_emptyTitle);
+    m_emptyHint = new QLabel(m_empty);
+    m_emptyHint->setObjectName(QStringLiteral("emptyHint"));
+    m_emptyHint->setWordWrap(true);
+    m_emptyHint->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(m_emptyHint);
+    emptyLayout->addStretch();
+    m_empty->hide();
+    col->addWidget(m_empty, 1);
 
-    connect(m_search, &QLineEdit::textChanged, this, [this] { reload(); });
+    auto* footerRow = new QHBoxLayout();
+    auto* footer = new QLabel(QStringLiteral("↑↓ Navigate    Enter Paste    Ctrl+1–9 Quick paste"), m_card);
+    footer->setObjectName(QStringLiteral("footer"));
+    footerRow->addWidget(footer);
+    footerRow->addStretch();
+    m_previewBtn = new QPushButton(QStringLiteral("Preview"), m_card);
+    m_previewBtn->setObjectName(QStringLiteral("previewButton"));
+    m_previewBtn->setToolTip(QStringLiteral("Preview full clip · Ctrl+Space"));
+    connect(m_previewBtn, &QPushButton::clicked, this, &OverlayWindow::previewCurrent);
+    footerRow->addWidget(m_previewBtn);
+    col->addLayout(footerRow);
+
+    connect(m_search, &QLineEdit::textChanged, this, [this] { reload(); selectRow(0); });
 
     setFixedSize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
                  Theme::OverlayHeight + 2 * Theme::ShadowMargin);
@@ -191,32 +283,51 @@ void OverlayWindow::buildUi() {
 
 void OverlayWindow::applyTheme() {
     const Theme::Palette& p = Theme::palette();
-    setStyleSheet(
-        QStringLiteral(
-            "#card { background-color:%1; border:1px solid %2; border-radius:%3px; }"
-            "#search { background-color:%4; border:1px solid %2; border-radius:%5px;"
-            "         padding:6px 10px; color:%6; font-size:%7px; selection-background-color:%8; }"
-            "#search:focus { border:1px solid %8; }"
-            "#count { color:%9; font-size:%10px; padding:0 4px; }"
-            "#iconBtn { background:transparent; border:none; color:%9; font-size:15px; border-radius:6px; }"
-            "#iconBtn:hover { background-color:%4; color:%6; }"
-            "#list { background:transparent; }"
-            "#list::item { border:none; }"
-            "#footer { color:%9; font-size:%11px; padding-top:4px; }"
-            "QScrollBar:vertical { background:transparent; width:8px; margin:2px; }"
-            "QScrollBar::handle:vertical { background:%2; border-radius:4px; min-height:24px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-            .arg(p.surface)       // 1
-            .arg(p.border)        // 2
-            .arg(Theme::RadiusLg) // 3
-            .arg(p.surfaceAlt)    // 4
-            .arg(Theme::RadiusMd) // 5
-            .arg(p.textPrimary)   // 6
-            .arg(Theme::FsBody)   // 7
-            .arg(p.accent)        // 8
-            .arg(p.textMuted)     // 9
-            .arg(Theme::FsMeta)   // 10
-            .arg(Theme::FsMicro));// 11
+    QString css = QStringLiteral(
+        "QWidget { color:@text; }"
+        "#card { background:@surface; border:1px solid @border; border-radius:18px; }"
+        "#brand { font-size:20px; font-weight:700; letter-spacing:-0.5px; }"
+        "#brandMark { background:@accent; border-radius:10px; }"
+        "#subtitle, #emptyHint { color:@muted; font-size:12px; }"
+        "#search { background:@alt; border:1px solid @border; border-radius:10px;"
+        " padding:8px 12px; font-size:14px; selection-background-color:@accent; }"
+        "#search:focus { border-color:@accent; }"
+        "#count { color:@muted; font-size:11px; font-weight:600; padding:4px 0; }"
+        "QToolButton, QPushButton { background:transparent; border:1px solid transparent;"
+        " border-radius:7px; padding:6px 9px; }"
+        "QToolButton:hover, QPushButton:hover { background:@alt; }"
+        "#iconBtn { padding:0; }"
+        "QToolButton:focus, QPushButton:focus { border-color:@accent; }"
+        "#filter { color:@muted; font-size:12px; padding:7px 12px; }"
+        "#filter:checked { color:@text; background:@alt; border:1px solid @border; font-weight:600; }"
+        "#capture { color:@accent; font-size:11px; background:@alt; }"
+        "#newSnippet { color:@accent; font-size:12px; }"
+        "#list { background:transparent; outline:none; }"
+        "#list::item { border:none; }"
+        "#footer { color:@muted; font-size:11px; }"
+        "#previewButton { color:@muted; font-size:11px; border-color:@border; }"
+        "#previewButton:disabled { color:@border; }"
+        "#emptyIcon { color:@accent; font-size:38px; }"
+        "#emptyTitle { font-size:18px; font-weight:600; padding:8px; }"
+        "QDialog, QMessageBox { background:@surface; }"
+        "QPlainTextEdit { background:@alt; border:1px solid @border; border-radius:8px; padding:12px; }"
+        "QMenu { background:@surface; color:@text; border:1px solid @border; padding:6px; }"
+        "QMenu::item { padding:8px 24px; border-radius:4px; }"
+        "QMenu::item:selected { background:@alt; }"
+        "QScrollBar:vertical { background:transparent; width:8px; margin:2px; }"
+        "QScrollBar::handle:vertical { background:@border; border-radius:3px; min-height:24px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background:transparent; }");
+    css.replace(QStringLiteral("@surface"), p.surface);
+    css.replace(QStringLiteral("@border"), p.border);
+    css.replace(QStringLiteral("@accent"), p.accent);
+    css.replace(QStringLiteral("@text"), p.textPrimary);
+    css.replace(QStringLiteral("@muted"), p.textMuted);
+    css.replace(QStringLiteral("@alt"), p.surfaceAlt);
+    setStyleSheet(css);
+    m_emptyIcon->setPixmap(IconFactory::pixmap(QStringLiteral("search"), QColor(p.accent), 36));
+    m_newBtn->setIcon(IconFactory::icon(QStringLiteral("plus"), QColor(p.accent), 14));
+    updateCaptureState();
 
     // Themed icons (recoloured per palette).
     if (m_searchIcon)
@@ -227,15 +338,35 @@ void OverlayWindow::applyTheme() {
         m_actions->retheme();
 }
 
+void OverlayWindow::updateCaptureState() {
+    const bool paused = m_monitor && m_monitor->isPaused();
+    m_pauseBtn->setText(paused ? QStringLiteral("Paused") : QStringLiteral("●  Capturing"));
+    m_pauseBtn->setToolTip(paused ? QStringLiteral("Resume clipboard capture") : QStringLiteral("Pause clipboard capture"));
+    m_pauseBtn->setAccessibleName(m_pauseBtn->toolTip());
+}
+
 void OverlayWindow::reload() {
     const int keepRow = currentRow();
-    m_model->setEntries(m_db->search(m_search->text()));
-    m_count->setText(QString::number(m_model->rowCount()));
-    if (m_model->rowCount() > 0)
-        selectRow(qBound(0, keepRow < 0 ? 0 : keepRow, m_model->rowCount() - 1));
-    else
-        m_actions->hide();
+    const qint64 keepId = currentEntry() ? currentEntry()->id : -1;
+    m_model->setEntries(m_db->search(m_search->text(), 200, m_filter));
+    const int count = m_model->rowCount();
+    m_count->setText(QStringLiteral("%1%2 %3").arg(count).arg(count == 200 ? QStringLiteral("+") : QString())
+        .arg(m_search->text().trimmed().isEmpty() ? QStringLiteral("clips") : QStringLiteral("results")));
+    m_list->setVisible(count > 0);
+    m_empty->setVisible(count == 0);
+    m_previewBtn->setEnabled(count > 0);
+    const bool searching = !m_search->text().trimmed().isEmpty();
+    m_emptyTitle->setText(searching ? QStringLiteral("No matching clips") :
+        m_filter == ClipFilter::All ? QStringLiteral("Your next idea starts here") : QStringLiteral("Nothing here yet"));
+    m_emptyHint->setText(searching ? QStringLiteral("Try a different word or app name, or switch to All clips.") :
+        m_filter == ClipFilter::Pinned ? QStringLiteral("Pin a useful clip to keep it close. Or create your first snippet above.") :
+        QStringLiteral("Copy text or an image and it will appear here.\nOpen your history anytime with Ctrl+Shift+V."));
+    int row = qBound(0, keepRow, qMax(0, count - 1));
+    for (int i = 0; i < count; ++i)
+        if (m_model->entryAt(i).id == keepId) { row = i; break; }
+    if (count > 0) selectRow(row);
     positionActionsBar();
+    updateCaptureState();
 }
 
 void OverlayWindow::selectRow(int row) {
@@ -270,12 +401,14 @@ void OverlayWindow::showAtCursor() {
         screen = QGuiApplication::primaryScreen();
     const QRect area = screen->availableGeometry();
 
+    setFixedSize(qMin(Theme::OverlayWidth + 2 * Theme::ShadowMargin, area.width()),
+                 qMin(Theme::OverlayHeight + 2 * Theme::ShadowMargin, area.height()));
     int x = cursor.x() - width() / 2;
     int y = cursor.y() + 12;
-    x = qBound(area.left(), x, area.right() - width());
+    x = qBound(area.left(), x, area.right() - width() + 1);
     if (y + height() > area.bottom())
         y = cursor.y() - height() - 12;
-    y = qBound(area.top(), y, area.bottom() - height());
+    y = qBound(area.top(), y, area.bottom() - height() + 1);
 
     move(x, y);
     setWindowOpacity(0.0); // fade in from transparent
@@ -296,16 +429,19 @@ void OverlayWindow::toggleAtCursor() {
         showAtCursor();
 }
 
-void OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
+bool OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
     QClipboard* cb = QApplication::clipboard();
-    if (m_monitor)
-        m_monitor->ignoreNextChange();
-
-    if (entry.isImage() && !entry.imagePath.isEmpty()) {
+    if (entry.isImage()) {
         const QImage img(entry.imagePath);
-        if (!img.isNull())
+        if (!img.isNull()) {
+            if (m_monitor) m_monitor->ignoreNextChange();
             cb->setImage(img);
-        return;
+            return true;
+        }
+        QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+        QMessageBox::information(this, QStringLiteral("Image unavailable"),
+            QStringLiteral("This image is no longer available on disk. Copy it again to add it to your history."));
+        return false;
     }
 
     QString text = entry.content;
@@ -316,15 +452,18 @@ void OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
         case PasteFormat::Trim:  text = text.trimmed();   break;
         case PasteFormat::Plain: break;
     }
+    if (m_monitor) m_monitor->ignoreNextChange();
     cb->setText(text);
+    return true;
 }
 
 void OverlayWindow::pasteCurrent(PasteFormat format) {
     const ClipEntry* e = currentEntry();
     if (!e)
         return;
+    const ClipEntry entry = *e;
+    if (!putOnClipboard(entry, format)) return;
     hide();
-    putOnClipboard(*e, format);
     // Let focus return to the previously active window before sending Ctrl+V.
     QTimer::singleShot(80, [] { platform::simulatePaste(); });
 }
@@ -333,7 +472,7 @@ void OverlayWindow::copyCurrent() {
     const ClipEntry* e = currentEntry();
     if (!e)
         return;
-    putOnClipboard(*e, PasteFormat::Plain);
+    if (!putOnClipboard(*e, PasteFormat::Plain)) return;
     // Stay open and confirm visually instead of hiding, so the copy feels acknowledged.
     if (m_actions && m_actions->isVisible())
         m_actions->flashCopied();
@@ -343,10 +482,8 @@ void OverlayWindow::pinCurrent() {
     const ClipEntry* e = currentEntry();
     if (!e)
         return;
-    const int row = currentRow();
     m_db->togglePin(e->id);
     reload();
-    selectRow(row);
 }
 
 void OverlayWindow::editCurrent() {
@@ -354,14 +491,13 @@ void OverlayWindow::editCurrent() {
     if (!e || e->isImage())
         return;
     const qint64 id = e->id;
-    const int row = currentRow();
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     bool ok = false;
     const QString text = QInputDialog::getMultiLineText(
         this, QStringLiteral("Edit clip"), QStringLiteral("Content:"), e->content, &ok);
     if (ok) {
         m_db->updateContent(id, text);
         reload();
-        selectRow(row);
     }
     activateWindow();
     m_search->setFocus();
@@ -372,17 +508,18 @@ void OverlayWindow::deleteCurrent() {
     if (!e)
         return;
     const int row = currentRow();
-    if (e->isImage() && !e->imagePath.isEmpty())
-        QFile::remove(e->imagePath);
-    m_db->removeEntry(e->id);
+    const QString imagePath = e->imagePath;
+    if (!m_db->removeEntry(e->id)) return;
+    if (!imagePath.isEmpty()) QFile::remove(imagePath);
     reload();
     if (m_model->rowCount() > 0)
         selectRow(qMin(row, m_model->rowCount() - 1));
 }
 
 void OverlayWindow::showFormatMenu() {
-    if (!hasSelection())
+    if (!hasSelection() || currentEntry()->isImage())
         return;
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     QMenu menu(this);
     menu.addAction(QStringLiteral("Plain"),  [this] { pasteCurrent(PasteFormat::Plain); });
     menu.addAction(QStringLiteral("UPPERCASE"), [this] { pasteCurrent(PasteFormat::Upper); });
@@ -397,8 +534,10 @@ void OverlayWindow::showContextMenu(const QPoint& globalPos) {
     const ClipEntry* e = currentEntry();
     if (!e)
         return;
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     QMenu menu(this);
     addSmartActions(menu, *e); // type-specific actions first, if any
+    menu.addAction(QStringLiteral("Preview   Ctrl+Space"), [this] { previewCurrent(); });
     menu.addAction(QStringLiteral("Paste"), [this] { pasteCurrent(); });
     menu.addAction(QStringLiteral("Copy"), [this] { copyCurrent(); });
     menu.addAction(e->pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin"),
@@ -485,6 +624,7 @@ void OverlayWindow::copyRawText(const QString& text) {
 }
 
 void OverlayWindow::newSnippet() {
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     bool ok = false;
     const QString text = QInputDialog::getMultiLineText(
         this, QStringLiteral("New snippet"),
@@ -494,13 +634,74 @@ void OverlayWindow::newSnippet() {
         e.content = text;
         e.sourceApp = QStringLiteral("Snippet");
         e.type = ContentClassifier::classify(text);
+        e.sensitive = ContentClassifier::looksSensitive(text);
         const qint64 id = m_db->insertEntry(e);
-        if (id > 0)
+        if (const auto saved = m_db->entryById(id); saved && !saved->pinned)
             m_db->togglePin(id);
+        m_filter = ClipFilter::All;
+        m_filters->button(0)->setChecked(true);
         m_search->clear();
         reload();
         selectRow(0);
     }
+    activateWindow();
+    m_search->setFocus();
+}
+
+void OverlayWindow::previewCurrent() {
+    if (!currentEntry()) return;
+    const ClipEntry entry = *currentEntry();
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Clip preview"));
+    dialog.resize(560, 440);
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(12);
+    auto* title = new QLabel(entry.sensitive ? QStringLiteral("Sensitive clip") : QStringLiteral("Clip preview"), &dialog);
+    title->setObjectName(QStringLiteral("emptyTitle"));
+    layout->addWidget(title);
+    auto* meta = new QLabel(QStringLiteral("%1 · %2")
+        .arg(entry.sourceApp.isEmpty() ? QStringLiteral("Clipboard") : entry.sourceApp,
+             entry.createdAt.toLocalTime().toString(QStringLiteral("ddd, d MMM · h:mm AP"))), &dialog);
+    meta->setTextFormat(Qt::PlainText);
+    meta->setObjectName(QStringLiteral("subtitle"));
+    layout->addWidget(meta);
+    if (entry.isImage()) {
+        auto* scroll = new QScrollArea(&dialog);
+        auto* image = new QLabel(scroll);
+        const QPixmap pixmap(entry.imagePath);
+        if (pixmap.isNull()) image->setText(QStringLiteral("This image is no longer available on disk."));
+        else image->setPixmap(pixmap);
+        image->setAlignment(Qt::AlignCenter);
+        scroll->setWidget(image);
+        scroll->setWidgetResizable(true);
+        layout->addWidget(scroll, 1);
+    } else {
+        auto* text = new QPlainTextEdit(&dialog);
+        text->setReadOnly(true);
+        text->setAccessibleName(QStringLiteral("Clip content"));
+        text->setPlainText(entry.sensitive ? QStringLiteral("This clip is hidden because it may contain a password or secret.") : entry.content);
+        layout->addWidget(text, 1);
+        if (entry.sensitive) {
+            auto* reveal = new QPushButton(QStringLiteral("Reveal content"), &dialog);
+            reveal->setCheckable(true);
+            connect(reveal, &QPushButton::toggled, text, [text, reveal, entry](bool shown) {
+                text->setPlainText(shown ? entry.content : QStringLiteral("Sensitive content is hidden."));
+                reveal->setText(shown ? QStringLiteral("Hide content") : QStringLiteral("Reveal content"));
+            });
+            layout->addWidget(reveal);
+        }
+    }
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    auto* copy = buttons->addButton(QStringLiteral("Copy clip"), QDialogButtonBox::ActionRole);
+    connect(copy, &QPushButton::clicked, this, [this, entry, copy] {
+        if (putOnClipboard(entry, PasteFormat::Plain))
+            copy->setText(QStringLiteral("Copied"));
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
     activateWindow();
     m_search->setFocus();
 }
@@ -517,7 +718,7 @@ void OverlayWindow::positionActionsBar() {
 
     m_actions->configure(e->pinned, !e->isImage());
     const int barW = m_actions->widthFor(!e->isImage());
-    const int barH = 34;
+    const int barH = 36;
     const int x = rect.right() - Theme::S2 - barW;
     const int y = rect.top() + (rect.height() - barH) / 2;
     m_actions->setGeometry(x, y, barW, barH);
@@ -526,6 +727,7 @@ void OverlayWindow::positionActionsBar() {
 }
 
 void OverlayWindow::openSettings() {
+    QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     SettingsDialog dlg(m_db, this);
     connect(&dlg, &SettingsDialog::pauseToggled, this,
             [this](bool paused) { if (m_monitor) m_monitor->setPaused(paused); });
@@ -558,6 +760,9 @@ bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
         }
 
         if (mods & Qt::ControlModifier) {
+            if (key == Qt::Key_Space) { previewCurrent(); return true; }
+            if (key == Qt::Key_F) { m_search->setFocus(); m_search->selectAll(); return true; }
+            if (key == Qt::Key_P) { pinCurrent(); return true; }
             if (key == Qt::Key_O) { runPrimarySmartAction(); return true; } // open url/file
             if (key == Qt::Key_N) { newSnippet(); return true; }           // new snippet
         }
@@ -606,7 +811,8 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 void OverlayWindow::changeEvent(QEvent* event) {
-    if (event->type() == QEvent::ActivationChange && isVisible() && !isActiveWindow())
+    if (event->type() == QEvent::ActivationChange && isVisible() && !isActiveWindow()
+        && !m_childDialogOpen && !QApplication::activePopupWidget())
         hide();
     QWidget::changeEvent(event);
 }

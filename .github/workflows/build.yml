@@ -45,6 +45,10 @@ jobs:
         shell: pwsh
         run: cmake --build build
 
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build --output-on-failure
+
       - name: Deploy (bundle Qt runtime)
         shell: pwsh
         run: |

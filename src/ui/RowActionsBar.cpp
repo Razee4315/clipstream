@@ -39,6 +39,7 @@ RowActionsBar::RowActionsBar(QWidget* parent) : QWidget(parent) {
 QToolButton* RowActionsBar::makeButton(const QString& tip) {
     auto* b = new QToolButton(this);
     b->setToolTip(tip);
+    b->setAccessibleName(tip);
     b->setCursor(Qt::PointingHandCursor);
     b->setFocusPolicy(Qt::NoFocus); // never steal focus from the search box
     b->setFixedSize(kBtn, kBtn);
@@ -77,7 +78,7 @@ void RowActionsBar::retheme() {
                                : QStringLiteral("rgba(0,0,0,0.16)");
     setStyleSheet(QStringLiteral(
         "#actionsBar { background-color:%1; border:1px solid %2; border-radius:%3px; }"
-        "QToolButton { background:transparent; border:none; border-radius:6px; }"
+        "QToolButton { background:transparent; border:none; border-radius:6px; padding:0; }"
         "QToolButton:hover { background-color:%4; }"
         "QToolButton:pressed { background-color:%5; }")
         .arg(pal.surfaceAlt, pal.border)

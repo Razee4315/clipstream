@@ -173,8 +173,8 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
         drawGlyph(painter, badgeRect, e.type, e.content);
     }
 
-    // Keep a fixed gutter clear on the right for the floating action bar.
-    const int rightLimit = full.right() - Theme::ActionsReserve;
+    // Only the selected row needs room for inline actions.
+    const int rightLimit = full.right() - (selected ? Theme::ActionsReserve : 38);
     const int textLeft = badgeRect.right() + Theme::S3;
     const QRect textArea(textLeft, full.top(), rightLimit - textLeft, full.height());
 
@@ -189,7 +189,7 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     painter->setFont(titleFont);
     painter->setPen(QColor(e.sensitive ? pal.textMuted : pal.textPrimary));
     const QFontMetrics tfm(titleFont);
-    painter->drawText(QRect(textArea.left(), textArea.top() + 9, textArea.width(), tfm.height()),
+    painter->drawText(QRect(textArea.left(), textArea.top() + 14, textArea.width(), tfm.height()),
                       Qt::AlignLeft | Qt::AlignVCenter,
                       tfm.elidedText(title, Qt::ElideRight, textArea.width()));
 
@@ -197,16 +197,16 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     metaFont.setPixelSize(Theme::FsMeta);
     painter->setFont(metaFont);
     painter->setPen(QColor(pal.textMuted));
-    const QString meta = appDisplayName(e.sourceApp) + QStringLiteral("  ·  ") + relativeTime(e.createdAt);
+    const QString meta = (e.pinned ? QStringLiteral("Pinned  ·  ") : QString())
+        + appDisplayName(e.sourceApp) + QStringLiteral("  ·  ") + relativeTime(e.createdAt);
     const QFontMetrics mfm(metaFont);
-    painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 7, textArea.width(), mfm.height()),
+    painter->drawText(QRect(textArea.left(), textArea.bottom() - mfm.height() - 12, textArea.width(), mfm.height()),
                       Qt::AlignLeft | Qt::AlignVCenter, mfm.elidedText(meta, Qt::ElideRight, textArea.width()));
 
-    // Pinned marker (the action bar covers this area only on the selected row).
-    if (e.pinned && !selected) {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(pal.accent));
-        painter->drawEllipse(QPoint(full.right() - Theme::S2 - 2, full.center().y()), 3, 3);
+    if (!selected && index.row() < 9) {
+        painter->setPen(QColor(pal.textMuted));
+        painter->drawText(QRect(full.right() - 32, full.top(), 24, full.height()),
+                          Qt::AlignCenter, QString::number(index.row() + 1));
     }
 
     painter->restore();

@@ -1,4 +1,5 @@
 #include "core/Database.h"
+#include "core/ContentClassifier.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -42,12 +43,17 @@ QDateTime parseUtc(const QString& s) {
 Database::Database(QObject* parent) : QObject(parent) {}
 
 Database::~Database() {
+    const QString connection = m_db.connectionName();
     if (m_db.isOpen())
         m_db.close();
+    m_db = QSqlDatabase();
+    if (!connection.isEmpty())
+        QSqlDatabase::removeDatabase(connection);
 }
 
-bool Database::open() {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+bool Database::open(const QString& directory) {
+    const QString dir = directory.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) : directory;
     QDir().mkpath(dir);
     m_imagesDir = dir + QStringLiteral("/images");
     QDir().mkpath(m_imagesDir);
@@ -177,31 +183,45 @@ ClipEntry Database::entryFromQuery(const QSqlQuery& q) {
     return e;
 }
 
-QVector<ClipEntry> Database::search(const QString& query, int limit) {
-    static const QString cols = QStringLiteral(
-        "id, content, source_app, content_type, created_at, is_pinned, image_path, sensitive");
-    QVector<ClipEntry> out;
-    QSqlQuery q(m_db);
-    const QString trimmed = query.trimmed();
-
-    if (trimmed.isEmpty()) {
-        q.prepare(QStringLiteral("SELECT %1 FROM clipboard_history "
-                                 "ORDER BY is_pinned DESC, created_at DESC LIMIT ?").arg(cols));
-        q.addBindValue(limit);
-    } else if (m_ftsAvailable) {
-        q.prepare(QStringLiteral(
-            "SELECT %1 FROM clipboard_history h JOIN history_fts f ON h.id = f.rowid "
-            "WHERE history_fts MATCH ? ORDER BY h.is_pinned DESC, rank LIMIT ?").arg(QStringLiteral(
-            "h.id, h.content, h.source_app, h.content_type, h.created_at, h.is_pinned, h.image_path, h.sensitive")));
-        q.addBindValue(QString(trimmed).remove(QLatin1Char('"')) + QLatin1Char('*'));
-        q.addBindValue(limit);
-    } else {
-        q.prepare(QStringLiteral("SELECT %1 FROM clipboard_history WHERE content LIKE ? "
-                                 "ORDER BY is_pinned DESC, created_at DESC LIMIT ?").arg(cols));
-        q.addBindValue(QLatin1Char('%') + trimmed + QLatin1Char('%'));
-        q.addBindValue(limit);
+QVector<ClipEntry> Database::search(const QString& query, int limit, ClipFilter filter) {
+    QString sql = QStringLiteral(
+        "SELECT id, content, source_app, content_type, created_at, is_pinned, image_path, sensitive "
+        "FROM clipboard_history WHERE 1=1");
+    switch (filter) {
+        case ClipFilter::Pinned: sql += QStringLiteral(" AND is_pinned = 1"); break;
+        case ClipFilter::Text: sql += QStringLiteral(" AND content_type != 'image'"); break;
+        case ClipFilter::Images: sql += QStringLiteral(" AND content_type = 'image'"); break;
+        case ClipFilter::Links: sql += QStringLiteral(" AND content_type = 'url'"); break;
+        case ClipFilter::All: break;
     }
-
+    const QString trimmed = query.trimmed();
+    if (!trimmed.isEmpty()) {
+        // Treat input as literal text, never as FTS operators. Substring matching
+        // also finds punctuation-heavy URLs, paths, colours and source apps.
+        sql += QStringLiteral(" AND sensitive = 0 AND (");
+        if (m_ftsAvailable)
+            sql += QStringLiteral("id IN (SELECT rowid FROM history_fts WHERE history_fts MATCH ?) OR ");
+        sql += QStringLiteral("content LIKE ? ESCAPE '\\' OR source_app LIKE ? ESCAPE '\\')");
+    }
+    sql += QStringLiteral(" ORDER BY is_pinned DESC, created_at DESC, id DESC LIMIT ?");
+    QSqlQuery q(m_db);
+    q.prepare(sql);
+    if (!trimmed.isEmpty()) {
+        if (m_ftsAvailable) {
+            QString phrase = trimmed;
+            phrase.replace(QLatin1Char('"'), QStringLiteral("\"\""));
+            q.addBindValue(QStringLiteral("\"%1\"*").arg(phrase));
+        }
+        QString literal = trimmed;
+        literal.replace(QStringLiteral("\\"), QStringLiteral("\\\\"));
+        literal.replace(QStringLiteral("%"), QStringLiteral("\\%"));
+        literal.replace(QStringLiteral("_"), QStringLiteral("\\_"));
+        literal = QLatin1Char('%') + literal + QLatin1Char('%');
+        q.addBindValue(literal);
+        q.addBindValue(literal);
+    }
+    q.addBindValue(limit);
+    QVector<ClipEntry> out;
     if (!q.exec()) {
         qWarning("ClipStream search failed: %s", qPrintable(q.lastError().text()));
         return out;
@@ -224,8 +244,10 @@ std::optional<ClipEntry> Database::entryById(qint64 id) {
 
 bool Database::updateContent(qint64 id, const QString& content) {
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral("UPDATE clipboard_history SET content = ? WHERE id = ?"));
+    q.prepare(QStringLiteral("UPDATE clipboard_history SET content = ?, content_type = ?, sensitive = ? WHERE id = ?"));
     q.addBindValue(content);
+    q.addBindValue(typeToString(ContentClassifier::classify(content)));
+    q.addBindValue(ContentClassifier::looksSensitive(content) ? 1 : 0);
     q.addBindValue(id);
     return q.exec();
 }
@@ -265,7 +287,7 @@ QStringList Database::cleanup(int maxAgeDays, int maxEntries) {
     doomed.prepare(QStringLiteral(
         "SELECT image_path FROM clipboard_history WHERE is_pinned = 0 AND image_path IS NOT NULL AND ("
         "  created_at < datetime('now', ?) OR id NOT IN ("
-        "    SELECT id FROM clipboard_history ORDER BY is_pinned DESC, created_at DESC LIMIT ?))"));
+        "    SELECT id FROM clipboard_history WHERE is_pinned = 0 ORDER BY created_at DESC, id DESC LIMIT ?))"));
     doomed.addBindValue(QStringLiteral("-%1 days").arg(maxAgeDays));
     doomed.addBindValue(maxEntries);
     if (doomed.exec()) {
@@ -285,7 +307,7 @@ QStringList Database::cleanup(int maxAgeDays, int maxEntries) {
     QSqlQuery byCount(m_db);
     byCount.prepare(QStringLiteral(
         "DELETE FROM clipboard_history WHERE is_pinned = 0 AND id NOT IN ("
-        "  SELECT id FROM clipboard_history ORDER BY is_pinned DESC, created_at DESC LIMIT ?)"));
+        "  SELECT id FROM clipboard_history WHERE is_pinned = 0 ORDER BY created_at DESC, id DESC LIMIT ?)"));
     byCount.addBindValue(maxEntries);
     byCount.exec();
 

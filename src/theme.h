@@ -20,13 +20,13 @@ constexpr int RadiusSm = 8, RadiusMd = 12, RadiusLg = 16;
 constexpr int FsTitle = 16, FsBody = 13, FsMeta = 11, FsMicro = 10;
 
 // ---- Overlay geometry -------------------------------------------------------
-constexpr int OverlayWidth  = 380;
-constexpr int OverlayHeight = 480;
+constexpr int OverlayWidth  = 560;
+constexpr int OverlayHeight = 640;
 constexpr int ShadowMargin  = 24; // transparent gutter so the drop shadow shows
 
 // ---- List rows --------------------------------------------------------------
-constexpr int RowHeight = 56;
-constexpr int BadgeSize = 34;
+constexpr int RowHeight = 72;
+constexpr int BadgeSize = 38;
 constexpr int ActionsReserve = 142; // right-side gutter kept clear for the action bar
 
 // ---- Colour palette (switchable, named) -------------------------------------

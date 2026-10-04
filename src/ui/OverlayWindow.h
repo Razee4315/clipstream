@@ -15,6 +15,9 @@ class QLabel;
 class QToolButton;
 class QModelIndex;
 class QPropertyAnimation;
+class QMenu;
+class QButtonGroup;
+class QPushButton;
 
 // The frameless launcher overlay: search box + history list + keyboard-driven
 // actions (paste, format-paste, pin, edit, delete, copy). Talks to the Database
@@ -54,10 +57,12 @@ private:
     void positionActionsBar();
     void openSettings();
     void newSnippet();
+    void previewCurrent();
+    void updateCaptureState();
     void runPrimarySmartAction();
     void addSmartActions(QMenu& menu, const ClipEntry& entry);
 
-    void putOnClipboard(const ClipEntry& entry, PasteFormat format);
+    bool putOnClipboard(const ClipEntry& entry, PasteFormat format);
     void copyRawText(const QString& text);
 
     Database* m_db = nullptr;
@@ -73,4 +78,14 @@ private:
     EntryDelegate* m_delegate = nullptr;
     RowActionsBar* m_actions = nullptr;
     QPropertyAnimation* m_fade = nullptr;
+    QButtonGroup* m_filters = nullptr;
+    ClipFilter m_filter = ClipFilter::All;
+    QWidget* m_empty = nullptr;
+    QLabel* m_emptyTitle = nullptr;
+    QLabel* m_emptyIcon = nullptr;
+    QLabel* m_emptyHint = nullptr;
+    QToolButton* m_pauseBtn = nullptr;
+    QToolButton* m_newBtn = nullptr;
+    QPushButton* m_previewBtn = nullptr;
+    bool m_childDialogOpen = false;
 };

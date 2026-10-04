@@ -104,6 +104,7 @@ void SettingsDialog::buildUi() {
         const QString id = m_themeCombo->itemData(idx).toString();
         m_db->setSetting(QStringLiteral("theme"), id);
         Theme::setThemeId(id);
+        setStyleSheet(buildStyleSheet());
         emit settingsChanged();
     });
     appearanceForm->addRow(QStringLiteral("Theme"), m_themeCombo);

@@ -15,7 +15,7 @@ class ClipboardMonitor : public QObject {
 public:
     explicit ClipboardMonitor(QObject* parent = nullptr);
 
-    void setPaused(bool paused) { m_paused = paused; }
+    void setPaused(bool paused);
     bool isPaused() const { return m_paused; }
 
     // Call right before we set the clipboard ourselves (e.g. paste/copy actions)

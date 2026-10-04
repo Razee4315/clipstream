@@ -13,15 +13,13 @@ Thanks for your interest in contributing!
 
 ## Development Setup
 
-```bash
-# Install dependencies
-npm install
+Requires Qt 6 with Widgets, SQL, SVG and Test, plus CMake and a matching C++ kit.
+For the Windows MinGW kit, put Qt, MinGW and Ninja on `PATH` first.
 
-# Run in development
-npm run tauri dev
-
-# Build for production
-npm run tauri build
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/Qt/6.11.1/mingw_64"
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
 ## Guidelines

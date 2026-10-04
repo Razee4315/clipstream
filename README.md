@@ -19,6 +19,9 @@ instantly with a global hotkey, full-text search, and one-keystroke paste.
 - **Event-driven capture** — listens to the OS clipboard, no polling, ~0% idle CPU
 - **Global hotkey** — `Ctrl+Shift+V` opens the overlay anywhere, at your cursor
 - **Full-text search** — instant SQLite FTS5 search across your history
+- **Focused browsing** — All clips, Pinned, Text, Images, and Links filters; search by content or source app
+- **Full clip preview** — inspect text and images without pasting; explicitly reveal sensitive content
+- **Capture at a glance** — pause or resume directly from the overlay header
 - **Text & images** — images stored as files on disk (not bloating the database)
 - **Smart actions** — open URLs, reveal files, convert colours, evaluate maths
 - **Format on paste** — paste as UPPER / lower / Title / trimmed
@@ -45,6 +48,9 @@ or build from source below.
 | `Ctrl+1`–`9` | Quick-paste the Nth clip |
 | `Ctrl+O` | Open link / file (smart action) |
 | `Ctrl+N` | New snippet |
+| `Ctrl+Space` | Preview the full clip |
+| `Ctrl+P` | Pin / unpin selected clip |
+| `Ctrl+F` | Focus search |
 | `F2` | Edit clip |
 | `Shift+Del` | Delete clip |
 | `Esc` | Close |
@@ -75,6 +81,12 @@ windeployqt --release --no-translations dist\ClipStream\ClipStream.exe
 ```
 
 CI builds and packages an installer on every push (see `.github/workflows/build.yml`).
+
+Run the regression suite with `ctest --test-dir build --output-on-failure` (Qt and
+MinGW runtime directories must be on `PATH`). Tests use a temporary database,
+an offscreen clipboard, and platform stubs; they do not access your clipboard
+history or send keystrokes to other apps. UI renders are saved under
+`build/artifacts/`. Pass `-DBUILD_TESTING=OFF` to build only the application.
 
 ## Project layout
 

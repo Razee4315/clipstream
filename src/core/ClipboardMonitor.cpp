@@ -39,6 +39,15 @@ ClipboardMonitor::ClipboardMonitor(QObject* parent) : QObject(parent) {
     connect(m_imageDebounce, &QTimer::timeout, this, &ClipboardMonitor::flushPendingImage);
 }
 
+void ClipboardMonitor::setPaused(bool paused) {
+    m_paused = paused;
+    if (paused) {
+        m_imageDebounce->stop();
+        m_pendingImage = QImage();
+        m_pendingSource.clear();
+    }
+}
+
 void ClipboardMonitor::flushPendingImage() {
     if (m_pendingImage.isNull())
         return;
@@ -83,8 +92,11 @@ void ClipboardMonitor::handleChange() {
     }
 
     if (mime->hasText()) {
-        const QString text = mime->text().trimmed();
-        if (text.isEmpty() || text == m_lastText)
+        m_imageDebounce->stop();
+        m_pendingImage = QImage();
+        m_pendingSource.clear();
+        const QString text = mime->text();
+        if (text.trimmed().isEmpty() || text == m_lastText)
             return; // ignore blanks and repeats of the last text we saw
         m_lastText = text;
         m_lastImageHash = 0;

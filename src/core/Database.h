@@ -18,8 +18,8 @@ public:
     explicit Database(QObject* parent = nullptr);
     ~Database() override;
 
-    // Open (creating if needed) the DB under the app data dir. False on failure.
-    bool open();
+    // Open (creating if needed) under app data, or an explicit directory for tests.
+    bool open(const QString& directory = QString());
 
     // Directory where image PNGs are written. Created on open().
     QString imagesDir() const;
@@ -29,7 +29,8 @@ public:
     qint64 insertEntry(const ClipEntry& entry);
 
     // Empty query → recent history (pinned first). Otherwise full-text search.
-    QVector<ClipEntry> search(const QString& query, int limit = 200);
+    QVector<ClipEntry> search(const QString& query, int limit = 200,
+                              ClipFilter filter = ClipFilter::All);
 
     std::optional<ClipEntry> entryById(qint64 id);
     bool updateContent(qint64 id, const QString& content);

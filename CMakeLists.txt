@@ -82,3 +82,21 @@ if(WIN32)
     # OpenProcess/QueryFullProcessImageNameW (kernel32, auto-linked).
     target_link_libraries(ClipStream PRIVATE user32)
 endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    set(TEST_SOURCES ${SOURCES})
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "src/main.cpp|src/AppController|src/platform/win/|resources/clipstream.rc")
+    if(WIN32)
+        list(APPEND TEST_SOURCES
+            src/platform/stub/HotkeyManager_stub.cpp
+            src/platform/stub/ForegroundApp_stub.cpp
+            src/platform/stub/PasteSimulator_stub.cpp
+            src/platform/stub/Autostart_stub.cpp)
+    endif()
+    qt_add_executable(ClipStreamTests tests/ClipStreamTests.cpp ${TEST_SOURCES})
+    target_include_directories(ClipStreamTests PRIVATE src)
+    target_link_libraries(ClipStreamTests PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test)
+    add_test(NAME ClipStreamTests COMMAND ClipStreamTests -platform offscreen)
+endif()

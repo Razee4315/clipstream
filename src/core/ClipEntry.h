@@ -14,6 +14,8 @@ enum class ContentType {
     Image,
 };
 
+enum class ClipFilter { All, Pinned, Text, Images, Links };
+
 // A single clipboard history record. Mirrors a row of the clipboard_history
 // table. For images, `content` holds a human label (e.g. "Image 1920x1080")
 // and `imagePath` points at the PNG on disk (images are never stored in the DB).
