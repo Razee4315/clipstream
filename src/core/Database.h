@@ -29,8 +29,13 @@ public:
     qint64 insertEntry(const ClipEntry& entry);
 
     // Empty query → recent history (pinned first). Otherwise full-text search.
+    // A list only needs the start of each clip: with previews, longer clips come
+    // back cut to kPreviewChars and marked truncated, and the unfiltered list is
+    // answered from an index without reading clip bodies at all, so a megabyte
+    // of copied text costs nothing to list. Use entryById() for the whole clip.
+    static constexpr int kPreviewChars = 400;
     QVector<ClipEntry> search(const QString& query, int limit = 200,
-                              ClipFilter filter = ClipFilter::All);
+                              ClipFilter filter = ClipFilter::All, bool previews = false);
 
     std::optional<ClipEntry> entryById(qint64 id);
     bool updateContent(qint64 id, const QString& content);

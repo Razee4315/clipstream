@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QRect>
 #include <QtGlobal>
 #include <functional>
 class QObject;
@@ -15,6 +16,11 @@ struct PasteTarget {
 PasteTarget capturePasteTarget();
 // False when another app held the clipboard open and our write was dropped.
 bool ownsClipboard();
+// Where the destination's text caret is, in native screen pixels. Empty when the
+// app does not report one (the popup then opens beside the mouse pointer).
+QRect caretRect(PasteTarget target);
+// Start the caret lookup machinery ahead of the first popup.
+void prepareCaretLookup();
 bool restorePasteTarget(PasteTarget target);
 void pasteToTarget(PasteTarget target, QObject* context, std::function<void(bool)> finished);
 void setPopupNonActivating(quintptr window, bool enabled);

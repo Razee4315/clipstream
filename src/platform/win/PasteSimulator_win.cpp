@@ -1,8 +1,12 @@
 #include "platform/PasteSimulator.h"
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QSemaphore>
+#include <QThread>
 #include <QTimer>
 #include <QObject>
+#include <atomic>
+#include <memory>
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -10,6 +14,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <ole2.h>
+#include <uiautomation.h>
 
 namespace platform {
 namespace {
@@ -19,6 +25,109 @@ bool valid(PasteTarget target) {
     return window && ::IsWindow(window) && ::GetWindowThreadProcessId(window, &process)
         && process == target.process && process != ::GetCurrentProcessId();
 }
+// The last rectangle of a text range: the line the caret or selection ends on.
+QRect lastRectangle(IUIAutomationTextRange* range) {
+    SAFEARRAY* rectangles = nullptr;
+    if (FAILED(range->GetBoundingRectangles(&rectangles)) || !rectangles) return {};
+    QRect last;
+    LONG upper = -1;
+    double* values = nullptr;
+    if (SUCCEEDED(::SafeArrayGetUBound(rectangles, 1, &upper)) && upper >= 3
+        && SUCCEEDED(::SafeArrayAccessData(rectangles, reinterpret_cast<void**>(&values)))) {
+        const double* r = values + (upper + 1) - 4; // x, y, width, height
+        last = QRect(qRound(r[0]), qRound(r[1]), qMax(1, qRound(r[2])), qRound(r[3]));
+        ::SafeArrayUnaccessData(rectangles);
+    }
+    ::SafeArrayDestroy(rectangles);
+    return last;
+}
+QRect focusedCaret(IUIAutomation* automation) {
+    IUIAutomationElement* focused = nullptr;
+    if (FAILED(automation->GetFocusedElement(&focused)) || !focused) return {};
+    IUIAutomationTextRange* range = nullptr;
+    IUIAutomationTextPattern2* caretPattern = nullptr;
+    if (SUCCEEDED(focused->GetCurrentPatternAs(UIA_TextPattern2Id, __uuidof(IUIAutomationTextPattern2),
+                                               reinterpret_cast<void**>(&caretPattern))) && caretPattern) {
+        BOOL active = FALSE;
+        caretPattern->GetCaretRange(&active, &range);
+        caretPattern->Release();
+    }
+    if (!range) { // Chromium has no caret range; the selection is the caret
+        IUIAutomationTextPattern* text = nullptr;
+        if (SUCCEEDED(focused->GetCurrentPatternAs(UIA_TextPatternId, __uuidof(IUIAutomationTextPattern),
+                                                   reinterpret_cast<void**>(&text))) && text) {
+            IUIAutomationTextRangeArray* selection = nullptr;
+            int count = 0;
+            if (SUCCEEDED(text->GetSelection(&selection)) && selection) {
+                if (SUCCEEDED(selection->get_Length(&count)) && count > 0)
+                    selection->GetElement(0, &range);
+                selection->Release();
+            }
+            text->Release();
+        }
+    }
+    QRect caret;
+    if (range) {
+        caret = lastRectangle(range);
+        if (caret.isEmpty()) { // an empty range may have no rectangle of its own
+            range->ExpandToEnclosingUnit(TextUnit_Character);
+            caret = lastRectangle(range);
+        }
+        range->Release();
+    }
+    focused->Release();
+    return caret;
+}
+// Apps that draw their own caret (browsers, Electron, modern UI frameworks) only
+// report it through UI Automation. Those calls cross into the other app, so they
+// run on a worker thread and the popup waits a bounded time for the answer.
+class CaretLocator {
+public:
+    static CaretLocator& instance() {
+        static CaretLocator* locator = new CaretLocator; // lives for the whole process
+        return *locator;
+    }
+    QRect locate(int timeoutMs) {
+        if (m_busy.exchange(true)) return {}; // still waiting on an app that is slow to answer
+        auto answer = std::make_shared<Answer>();
+        QMetaObject::invokeMethod(m_worker, [this, answer] {
+            if (m_automation) answer->caret = focusedCaret(m_automation);
+            m_busy = false;
+            answer->ready.release();
+        }, Qt::QueuedConnection);
+        return answer->ready.tryAcquire(1, timeoutMs) ? answer->caret : QRect();
+    }
+private:
+    struct Answer { QSemaphore ready; QRect caret; };
+    CaretLocator() : m_worker(new QObject) {
+        m_worker->moveToThread(&m_thread);
+        m_thread.start();
+        QMetaObject::invokeMethod(m_worker, [this] {
+            ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            if (FAILED(::CoCreateInstance(__uuidof(CUIAutomation8), nullptr, CLSCTX_INPROC_SERVER,
+                                          __uuidof(IUIAutomation), reinterpret_cast<void**>(&m_automation))))
+                m_automation = nullptr;
+            IUIAutomation2* limits = nullptr;
+            if (m_automation && SUCCEEDED(m_automation->QueryInterface(__uuidof(IUIAutomation2),
+                                                                     reinterpret_cast<void**>(&limits))) && limits) {
+                // Never let an unresponsive app hold the worker for long.
+                limits->put_ConnectionTimeout(300);
+                limits->put_TransactionTimeout(300);
+                limits->Release();
+            }
+        }, Qt::QueuedConnection);
+        QObject::connect(qApp, &QCoreApplication::aboutToQuit, m_worker, [this] {
+            if (m_automation) { m_automation->Release(); m_automation = nullptr; }
+            ::CoUninitialize();
+            m_thread.quit();
+        });
+        QObject::connect(qApp, &QCoreApplication::aboutToQuit, qApp, [this] { m_thread.wait(1000); });
+    }
+    QThread m_thread;
+    QObject* m_worker;
+    IUIAutomation* m_automation = nullptr; // worker thread only
+    std::atomic_bool m_busy{false};
+};
 // The taskbar and tray are foreground when the popup is opened from the tray
 // icon; they are never a useful paste destination.
 bool isShellWindow(HWND window) {
@@ -86,6 +195,31 @@ PasteTarget capturePasteTarget() {
 }
 bool ownsClipboard() {
     return QGuiApplication::clipboard()->ownsClipboard();
+}
+QRect caretRect(PasteTarget target) {
+    if (!valid(target)) return {};
+    const HWND window = reinterpret_cast<HWND>(target.window);
+    RECT frame{};
+    ::GetWindowRect(window, &frame);
+    // A caret reported outside its own window is stale or in another coordinate space.
+    const auto inside = [&frame](const QRect& caret) {
+        return !caret.isEmpty() && caret.center().x() >= frame.left && caret.center().x() <= frame.right
+            && caret.center().y() >= frame.top && caret.center().y() <= frame.bottom;
+    };
+    GUITHREADINFO info{sizeof(GUITHREADINFO)};
+    if (::GetGUIThreadInfo(::GetWindowThreadProcessId(window, nullptr), &info)
+        && info.hwndCaret && info.rcCaret.bottom > info.rcCaret.top) {
+        POINT topLeft{info.rcCaret.left, info.rcCaret.top};
+        ::ClientToScreen(info.hwndCaret, &topLeft);
+        const QRect caret(topLeft.x, topLeft.y, qMax(1L, info.rcCaret.right - info.rcCaret.left),
+                          info.rcCaret.bottom - info.rcCaret.top);
+        if (inside(caret)) return caret;
+    }
+    const QRect caret = CaretLocator::instance().locate(70);
+    return inside(caret) ? caret : QRect();
+}
+void prepareCaretLookup() {
+    CaretLocator::instance();
 }
 bool restorePasteTarget(PasteTarget target) {
     if (!valid(target)) return false;

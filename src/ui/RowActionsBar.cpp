@@ -52,12 +52,22 @@ int RowActionsBar::widthFor(bool editable) const {
     return count * kBtn + (count - 1) * 2 + 4;
 }
 
+// Runs on every selection change, so it only touches what actually differs.
+// Restyling here made each arrow-key step cost a full style recalculation.
 void RowActionsBar::configure(bool pinned, bool editable) {
+    if (m_edit->isHidden() == editable)
+        m_edit->setVisible(editable);
+    if (m_pinned == pinned)
+        return;
     m_pinned = pinned;
-    m_edit->setVisible(editable);
-    m_pin->setToolTip(pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin"));
-    retheme();
-    adjustSize();
+    updatePinButton();
+}
+
+void RowActionsBar::updatePinButton() {
+    const Theme::Palette& pal = Theme::palette();
+    m_pin->setToolTip(m_pinned ? QStringLiteral("Unpin") : QStringLiteral("Pin"));
+    m_pin->setIcon(IconFactory::icon(QStringLiteral("pin"),
+                                     QColor(m_pinned ? pal.accent : pal.textMuted), kIcon));
 }
 
 void RowActionsBar::retheme() {
@@ -65,8 +75,7 @@ void RowActionsBar::retheme() {
     const QColor ink(pal.textMuted);
     const QColor danger(0xef, 0x44, 0x44);
 
-    m_pin->setIcon(IconFactory::icon(QStringLiteral("pin"),
-                                     m_pinned ? QColor(pal.accent) : ink, kIcon));
+    updatePinButton();
     m_copy->setIcon(IconFactory::icon(QStringLiteral("copy"), ink, kIcon));
     m_edit->setIcon(IconFactory::icon(QStringLiteral("edit"), ink, kIcon));
     m_delete->setIcon(IconFactory::icon(QStringLiteral("trash"), danger, kIcon));

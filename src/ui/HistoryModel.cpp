@@ -5,7 +5,16 @@ HistoryModel::HistoryModel(QObject* parent) : QAbstractListModel(parent) {}
 void HistoryModel::setEntries(QVector<ClipEntry> entries) {
     beginResetModel();
     m_entries = std::move(entries);
+    m_titles.clear();
+    m_titles.reserve(m_entries.size());
+    for (const ClipEntry& e : m_entries)
+        m_titles.append(e.sensitive ? QStringLiteral("•••••  sensitive — hidden")
+                                    : e.content.left(240).simplified());
     endResetModel();
+}
+
+const QString& HistoryModel::titleAt(int row) const {
+    return m_titles.at(row);
 }
 
 const ClipEntry& HistoryModel::entryAt(int row) const {
@@ -27,7 +36,7 @@ QVariant HistoryModel::data(const QModelIndex& index, int role) const {
     switch (role) {
         case Qt::DisplayRole:
         case Qt::ToolTipRole:
-            return e.sensitive ? QStringLiteral("(hidden sensitive content)") : e.content;
+            return e.sensitive ? QStringLiteral("(hidden sensitive content)") : m_titles.at(index.row());
         default:
             return {};
     }

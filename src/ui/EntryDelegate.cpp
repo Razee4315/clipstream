@@ -3,6 +3,7 @@
 #include "core/ClipEntry.h"
 #include "theme.h"
 #include "ui/HistoryModel.h"
+#include "ui/ThumbnailCache.h"
 
 #include <QApplication>
 #include <QDateTime>
@@ -11,7 +12,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-#include <QPixmapCache>
 
 namespace {
 
@@ -28,7 +28,8 @@ QColor badgeColor(ContentType type) {
 }
 
 QString relativeTime(const QDateTime& utc) {
-    const qint64 secs = utc.toLocalTime().secsTo(QDateTime::currentDateTime());
+    // Plain epoch arithmetic: no time-zone conversion on the paint path.
+    const qint64 secs = QDateTime::currentSecsSinceEpoch() - utc.toSecsSinceEpoch();
     if (secs < 60)    return QStringLiteral("now");
     if (secs < 3600)  return QStringLiteral("%1m").arg(secs / 60);
     if (secs < 86400) return QStringLiteral("%1h").arg(secs / 3600);
@@ -110,7 +111,8 @@ void drawGlyph(QPainter* p, const QRectF& r, ContentType type, const QString& co
 
 } // namespace
 
-EntryDelegate::EntryDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
+EntryDelegate::EntryDelegate(QObject* parent)
+    : QStyledItemDelegate(parent), m_thumbnails(new ThumbnailCache(this)) {}
 
 QSize EntryDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const {
     return QSize(option.rect.width(), Theme::RowHeight);
@@ -147,21 +149,15 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const int badge = Theme::BadgeSize;
     const QRect badgeRect(full.left() + Theme::S3, full.center().y() - badge / 2, badge, badge);
     if (e.isImage() && !e.imagePath.isEmpty()) {
-        QPixmap pm;
-        const QString key = QStringLiteral("clip_") + e.imagePath;
-        if (!QPixmapCache::find(key, &pm)) {
-            QPixmap src(e.imagePath);
-            if (!src.isNull()) {
-                pm = src.scaled(badge, badge, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-                QPixmapCache::insert(key, pm);
-            }
-        }
+        // Decoded off the GUI thread; the placeholder shows until it arrives.
+        const QPixmap pm = m_thumbnails->get(e.imagePath);
         QPainterPath clip;
         clip.addRoundedRect(badgeRect, 6, 6);
         painter->setClipPath(clip);
-        if (!pm.isNull())
-            painter->drawPixmap(badgeRect, pm, QRect((pm.width() - badge) / 2, (pm.height() - badge) / 2, badge, badge));
-        else {
+        if (!pm.isNull()) {
+            painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+            painter->drawPixmap(badgeRect, pm);
+        } else {
             painter->setBrush(badgeColor(ContentType::Image));
             painter->drawRoundedRect(badgeRect, 6, 6);
         }
@@ -178,13 +174,10 @@ void EntryDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const int textLeft = badgeRect.right() + Theme::S3;
     const QRect textArea(textLeft, full.top(), rightLimit - textLeft, full.height());
 
-    const QString title = e.sensitive
-        ? QStringLiteral("•••••  sensitive — hidden")
-        : e.content.simplified();
+    const QString& title = model->titleAt(index.row());
 
-    QFont titleFont = (e.type == ContentType::Code)
-                          ? QFontDatabase::systemFont(QFontDatabase::FixedFont)
-                          : option.font;
+    static const QFont fixedFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    QFont titleFont = (e.type == ContentType::Code) ? fixedFont : option.font;
     titleFont.setPixelSize(Theme::FsBody);
     painter->setFont(titleFont);
     painter->setPen(QColor(e.sensitive ? pal.textMuted : pal.textPrimary));

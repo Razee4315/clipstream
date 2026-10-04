@@ -14,6 +14,7 @@ public:
 
     void setEntries(QVector<ClipEntry> entries);
     const ClipEntry& entryAt(int row) const;
+    const QString& titleAt(int row) const; // single-line text for the row
     bool isValidRow(int row) const;
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -21,4 +22,5 @@ public:
 
 private:
     QVector<ClipEntry> m_entries;
+    QVector<QString> m_titles;
 };

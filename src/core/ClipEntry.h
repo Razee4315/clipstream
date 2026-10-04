@@ -28,6 +28,7 @@ struct ClipEntry {
     bool        pinned = false;
     QString     imagePath;       // absolute path to PNG for Image entries
     bool        sensitive = false; // masked in UI, kept out of the search index
+    bool        truncated = false; // content is only a preview; fetch by id for the rest
 
     bool isImage() const { return type == ContentType::Image; }
 };

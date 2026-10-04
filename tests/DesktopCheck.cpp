@@ -11,8 +11,11 @@
 #include "theme.h"
 #include <QApplication>
 #include <QCursor>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QScreen>
+#include <QTextStream>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QProcess>
@@ -147,6 +150,32 @@ private slots:
         clickFirst();
         QTRY_COMPARE(text(), QStringLiteral("Before ClipStream pasted correctly after"));
         QCOMPARE(::GetForegroundWindow(), target);
+    }
+    // Like the Windows clipboard panel: the popup opens under the text caret.
+    void opensAtTextCaret() {
+        const QRect caret = platform::caretRect(platform::capturePasteTarget()); // native pixels
+        QVERIFY(!caret.isEmpty());
+        const QPoint saved = QCursor::pos();
+        auto restoreCursor = qScopeGuard([saved] { QCursor::setPos(saved); });
+        // Park the pointer far away so the caret, not the mouse, must be the anchor.
+        QCursor::setPos(QGuiApplication::primaryScreen()->availableGeometry().bottomRight());
+        overlay->showAtCursor();
+        QTest::qWait(130);
+        const qreal scale = overlay->devicePixelRatioF();
+        // The visible card sits inside the transparent shadow gutter.
+        const QPointF card = QPointF(overlay->pos() + QPoint(Theme::ShadowMargin, Theme::ShadowMargin)) * scale;
+        QVERIFY2(qAbs(card.x() - caret.left()) <= 3 * scale,
+                 qPrintable(QStringLiteral("card x %1, caret x %2").arg(card.x()).arg(caret.left())));
+        QVERIFY2(qAbs(card.y() - (caret.bottom() + 6 * scale)) <= 3 * scale,
+                 qPrintable(QStringLiteral("card y %1, caret bottom %2").arg(card.y()).arg(caret.bottom())));
+        db->setSetting(QStringLiteral("popup_anchor"), QStringLiteral("mouse"));
+        overlay->hide();
+        QCursor::setPos(QGuiApplication::primaryScreen()->availableGeometry().center());
+        overlay->showAtCursor();
+        QTest::qWait(130);
+        db->setSetting(QStringLiteral("popup_anchor"), QStringLiteral("caret"));
+        const QPoint pointer = QCursor::pos();
+        QVERIFY(qAbs(overlay->x() + Theme::ShadowMargin - pointer.x()) <= 3);
     }
     void searchRestoresOriginalSelection() {
         overlay->showAtCursor();
@@ -339,6 +368,152 @@ int main(int argc, char** argv) {
         QObject::connect(&timer, &QTimer::timeout, &app, [&] { if (!::IsWindow(window)) app.quit(); });
         timer.start();
         return app.exec();
+    }
+    // Timing harness: shows the popup without taking focus or sending input and
+    // measures the interactions that have to feel instant. Optional argument: a
+    // data folder to measure instead of the synthetic history.
+    if (app.arguments().contains(QStringLiteral("--bench"))) {
+        const int at = app.arguments().indexOf(QStringLiteral("--bench"));
+        const QString folder = app.arguments().value(at + 1);
+        QTemporaryDir scratch;
+        Database db;
+        if (!db.open(folder.isEmpty() ? scratch.path() : folder)) return 1;
+        if (folder.isEmpty()) {
+            QImage picture(1920, 1080, QImage::Format_RGB32);
+            for (int i = 0; i < 300; ++i) {
+                ClipEntry entry;
+                entry.sourceApp = QStringLiteral("Bench.exe");
+                if (i % 25 == 0) {
+                    picture.fill(QColor::fromHsv(i % 360, 160, 200));
+                    entry.type = ContentType::Image;
+                    entry.imagePath = db.imagesDir() + QStringLiteral("/bench_%1.png").arg(i);
+                    picture.save(entry.imagePath);
+                    entry.content = QStringLiteral("Image 1920×1080");
+                } else if (i % 40 == 7) {
+                    entry.content = QStringLiteral("line of a large log file %1\n").arg(i).repeated(40000); // ~1 MB
+                } else if (i % 5 == 0) {
+                    entry.type = ContentType::Url;
+                    entry.content = QStringLiteral("https://example.com/page/%1").arg(i);
+                } else {
+                    entry.content = QStringLiteral("Clip number %1 with a normal sentence of text.").arg(i);
+                }
+                db.insertEntry(entry);
+            }
+        }
+        QFile report(QCoreApplication::applicationDirPath() + QStringLiteral("/artifacts/bench.txt"));
+        QDir().mkpath(QCoreApplication::applicationDirPath() + QStringLiteral("/artifacts"));
+        if (!report.open(QIODevice::WriteOnly | QIODevice::Text)) return 1;
+        QTextStream out(&report);
+        QElapsedTimer clock;
+        const auto settle = [] { for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); QTest::qWait(10); } };
+        const auto timed = [&](const QString& label, const std::function<void()>& action) {
+            clock.start();
+            action();
+            QCoreApplication::processEvents(); // deliver the resulting layout and paint
+            out << QStringLiteral("%1 ms  %2\n").arg(clock.nsecsElapsed() / 1e6, 8, 'f', 1).arg(label);
+            out.flush();
+            settle();
+        };
+        OverlayWindow overlay(&db, nullptr);
+        platform::setPopupNonActivating(overlay.winId(), true);
+        const QRect area = QGuiApplication::primaryScreen()->availableGeometry();
+        overlay.move(area.right() - overlay.width(), area.bottom() - overlay.height());
+        timed(QStringLiteral("warm-up at startup"), [&] { overlay.warmUp(); });
+        timed(QStringLiteral("first show"), [&] { overlay.show(); });
+        QTest::qWait(300);
+        timed(QStringLiteral("full repaint"), [&] { overlay.repaint(); });
+        auto* list = overlay.findChild<QListView*>();
+        const auto filters = overlay.findChildren<QPushButton*>(QStringLiteral("filter"));
+        for (int round = 0; round < 2; ++round)
+            for (int i : {3, 2, 4, 1, 0})
+                timed(QStringLiteral("click filter '%1' (round %2)").arg(filters[i]->text()).arg(round + 1),
+                      [&] { QTest::mouseClick(filters[i], Qt::LeftButton); });
+        for (int row = 0; row < 6 && row < list->model()->rowCount(); ++row)
+            timed(QStringLiteral("hover row %1").arg(row), [&] {
+                QTest::mouseMove(list->viewport(), list->visualRect(list->model()->index(row, 0)).center());
+            });
+        for (int row = 1; row <= 6 && row < list->model()->rowCount(); ++row)
+            timed(QStringLiteral("select row %1").arg(row), [&] { list->setCurrentIndex(list->model()->index(row, 0)); });
+        timed(QStringLiteral("scroll to bottom"), [&] { list->scrollToBottom(); });
+        timed(QStringLiteral("scroll to top"), [&] { list->scrollToTop(); });
+        auto* search = overlay.findChild<QLineEdit*>(QStringLiteral("search"));
+        for (const char* query : {"c", "cl", "cli", "clip", ""})
+            timed(QStringLiteral("search '%1'").arg(QLatin1String(query)), [&] { search->setText(QLatin1String(query)); });
+        // Where a reload spends its time: the query alone, then the whole refresh.
+        const auto average = [&](const QString& label, const std::function<void()>& action) {
+            clock.start();
+            for (int i = 0; i < 20; ++i) action();
+            out << QStringLiteral("%1 ms  %2 (average of 20)\n").arg(clock.nsecsElapsed() / 20e6, 8, 'f', 2).arg(label);
+        };
+        average(QStringLiteral("query: list previews"), [&] { db.search(QString(), 200, ClipFilter::All, true); });
+        average(QStringLiteral("query: search 'clip'"), [&] { db.search(QStringLiteral("clip"), 200, ClipFilter::All, true); });
+        average(QStringLiteral("reload without painting"), [&] { overlay.reload(); });
+        average(QStringLiteral("reload and paint"), [&] { overlay.reload(); QCoreApplication::processEvents(); });
+        average(QStringLiteral("repaint whole popup"), [&] { overlay.repaint(); });
+        // What the compositor actually shows, at this display's scaling.
+        QGuiApplication::primaryScreen()->grabWindow(0, overlay.x(), overlay.y(), overlay.width(), overlay.height())
+            .save(QCoreApplication::applicationDirPath() + QStringLiteral("/artifacts/bench-screen.png"));
+        timed(QStringLiteral("hide"), [&] { overlay.hide(); });
+        timed(QStringLiteral("second show"), [&] { overlay.show(); });
+        overlay.hide();
+        // The real open path: find the destination and its caret, load, position,
+        // show. Hidden again at once so its temporary hotkeys exist for an instant.
+        for (int i = 0; i < 3; ++i) {
+            clock.start();
+            overlay.showAtCursor();
+            QCoreApplication::processEvents();
+            const double ms = clock.nsecsElapsed() / 1e6;
+            overlay.hide();
+            out << QStringLiteral("%1 ms  open with hotkey path\n").arg(ms, 8, 'f', 1);
+            settle();
+        }
+        out << QStringLiteral("rows %1  devicePixelRatio %2\n").arg(list->model()->rowCount()).arg(overlay.devicePixelRatioF());
+        return 0;
+    }
+    // Read-only: reports where the caret of the foreground app is found. With a
+    // window title after --caret, that window is brought forward first.
+    if (app.arguments().contains(QStringLiteral("--caret"))) {
+        QFile report(QCoreApplication::applicationDirPath() + QStringLiteral("/artifacts/caret.txt"));
+        if (!report.open(QIODevice::WriteOnly | QIODevice::Text)) return 1;
+        QTextStream out(&report);
+        static QString wanted;
+        wanted = app.arguments().value(app.arguments().indexOf(QStringLiteral("--caret")) + 1);
+        const auto titleOf = [](HWND window) {
+            wchar_t text[256] = {};
+            ::GetWindowTextW(window, text, 256);
+            return QString::fromWCharArray(text);
+        };
+        const HWND before = ::GetForegroundWindow();
+        HWND named = nullptr;
+        if (!wanted.isEmpty())
+            ::EnumWindows([](HWND top, LPARAM found) -> BOOL {
+                wchar_t text[256] = {};
+                ::GetWindowTextW(top, text, 256);
+                if (!::IsWindowVisible(top) || !QString::fromWCharArray(text).contains(wanted)) return TRUE;
+                *reinterpret_cast<HWND*>(found) = top;
+                return FALSE;
+            }, reinterpret_cast<LPARAM>(&named));
+        if (named) { ::SetForegroundWindow(named); QTest::qWait(900); }
+        platform::prepareCaretLookup();
+        for (int attempt = 1; attempt <= 3; ++attempt) {
+            QElapsedTimer clock; clock.start();
+            const auto target = platform::capturePasteTarget();
+            const QRect caret = platform::caretRect(target);
+            const double ms = clock.nsecsElapsed() / 1e6;
+            RECT frame{};
+            ::GetWindowRect(reinterpret_cast<HWND>(target.window), &frame);
+            wchar_t cls[128] = {};
+            ::GetClassNameW(reinterpret_cast<HWND>(target.window), cls, 128);
+            out << "attempt " << attempt << ": window \"" << titleOf(reinterpret_cast<HWND>(target.window)).left(40)
+                << "\" class " << QString::fromWCharArray(cls)
+                << " rect " << frame.left << "," << frame.top << "-" << frame.right << "," << frame.bottom << "\n"
+                << "  caret " << (caret.isEmpty() ? QStringLiteral("not reported (popup opens at the mouse pointer)")
+                       : QStringLiteral("%1,%2 %3x%4").arg(caret.x()).arg(caret.y()).arg(caret.width()).arg(caret.height()))
+                << "  lookup " << ms << " ms\n";
+            QTest::qWait(400);
+        }
+        if (named && ::IsWindow(before)) ::SetForegroundWindow(before);
+        return 0;
     }
     if (app.arguments().contains(QStringLiteral("--verify"))) {
         WindowsPasteTests tests;

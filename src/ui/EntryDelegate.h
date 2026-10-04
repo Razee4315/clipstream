@@ -2,6 +2,8 @@
 
 #include <QStyledItemDelegate>
 
+class ThumbnailCache;
+
 // Draws a clip row: a type badge (or image thumbnail), the content on one elided
 // line, and an "app · time" meta line. Inline action buttons are a separate
 // floating widget (RowActionsBar) positioned over the selected row; this
@@ -15,4 +17,9 @@ public:
                const QModelIndex& index) const override;
     QSize sizeHint(const QStyleOptionViewItem& option,
                    const QModelIndex& index) const override;
+
+    ThumbnailCache* thumbnails() const { return m_thumbnails; }
+
+private:
+    ThumbnailCache* m_thumbnails;
 };

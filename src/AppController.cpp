@@ -14,7 +14,10 @@
 #include <QFile>
 #include <QIcon>
 #include <QMenu>
+#include <QPointer>
 #include <QSystemTrayIcon>
+#include <QThreadPool>
+#include <QTimer>
 
 AppController::AppController(QObject* parent)
     : QObject(parent),
@@ -41,6 +44,8 @@ bool AppController::initialize() {
     Theme::setThemeId(m_db->setting(QStringLiteral("theme"), QStringLiteral("system")));
 
     m_overlay = std::make_unique<OverlayWindow>(m_db.get(), m_monitor.get());
+    // Once the event loop is running, so startup itself is not delayed.
+    QTimer::singleShot(0, m_overlay.get(), &OverlayWindow::warmUp);
 
     setupTray();
     connect(m_overlay.get(), &OverlayWindow::pasteFailed, this, [this] {
@@ -174,19 +179,30 @@ void AppController::onImageCaptured(const QImage& image, const QString& sourceAp
     const QString fileName = QStringLiteral("img_%1.png")
                                  .arg(QDateTime::currentMSecsSinceEpoch());
     const QString path = m_db->imagesDir() + QLatin1Char('/') + fileName;
-    if (!image.save(path, "PNG")) {
-        qWarning("ClipStream: failed to save clipboard image to %s", qPrintable(path));
-        return;
-    }
 
     ClipEntry e;
     e.content = QStringLiteral("Image %1×%2").arg(image.width()).arg(image.height());
     e.sourceApp = sourceApp;
     e.type = ContentType::Image;
     e.imagePath = path;
-    m_db->insertEntry(e);
-    applyRetention();
-    m_overlay->reload();
+
+    // Compressing a screenshot to PNG takes long enough to stall the hotkey and
+    // the popup, so it runs on a worker thread; the clip appears once it is saved.
+    QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, image, e] {
+        const bool saved = image.save(e.imagePath, "PNG");
+        QMetaObject::invokeMethod(qApp, [self, e, saved] {
+            if (!self)
+                return;
+            if (!saved) {
+                qWarning("ClipStream: failed to save clipboard image to %s", qPrintable(e.imagePath));
+                return;
+            }
+            self->m_db->insertEntry(e);
+            self->applyRetention();
+            self->m_overlay->reload();
+        }, Qt::QueuedConnection);
+    });
 }
 
 void AppController::applyRetention() {

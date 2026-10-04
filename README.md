@@ -24,7 +24,7 @@ ClipStream stays in your system tray.
 
 ## Made for your everyday copy & paste
 
-- **Paste right where you were.** The popup opens without taking focus, so your app and selection stay put. One click, or **Enter**, replaces the selection.
+- **Paste right where you were.** The popup opens at your text cursor without taking focus, so your app and selection stay put. One click, or **Enter**, replaces the selection.
 - **Find anything faster.** Search text or app names; filter pinned clips, text, images, and links.
 - **Keep the useful bits.** Pin favourites, save reusable snippets, and preview full clips before pasting.
 - **Do more with a clip.** Open links and files, change text case, convert colours, or paste a calculation result.

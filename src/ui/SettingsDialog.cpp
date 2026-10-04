@@ -149,12 +149,23 @@ void SettingsDialog::buildUi() {
         m_db->setSetting(QStringLiteral("overlay_size"), size->currentData().toString());
         emit settingsChanged();
     });
+    auto* anchor = new QComboBox(this);
+    anchor->setObjectName(QStringLiteral("popupAnchor"));
+    anchor->addItem(QStringLiteral("At the text cursor"), QStringLiteral("caret"));
+    anchor->addItem(QStringLiteral("At the mouse pointer"), QStringLiteral("mouse"));
+    anchor->setCurrentIndex(qMax(0, anchor->findData(m_db->setting(QStringLiteral("popup_anchor"), QStringLiteral("caret")))));
+    form->addRow(QStringLiteral("Open popup"), anchor);
+    connect(anchor, &QComboBox::currentIndexChanged, this, [this, anchor] {
+        m_db->setSetting(QStringLiteral("popup_anchor"), anchor->currentData().toString());
+    });
     general->addLayout(form);
     m_launchAtStartup = new QCheckBox(QStringLiteral("Start with Windows"), this);
     m_launchAtStartup->setChecked(platform::isLaunchAtStartupEnabled());
     connect(m_launchAtStartup, &QCheckBox::toggled, this, [](bool enabled) { platform::setLaunchAtStartup(enabled); });
     general->addWidget(m_launchAtStartup);
     hint(general, QStringLiteral("Ctrl+Shift+V opens your history without taking focus. Click a clip to paste it into the original app."));
+    hint(general, QStringLiteral("To find the text cursor in browsers, ClipStream asks the app's accessibility support. "
+                                 "If the app does not report one, the popup opens at the mouse pointer."));
     hint(general, QStringLiteral("Ctrl+F  Search    ↑↓  Navigate    Enter  Paste\nCtrl+Space  Preview    Ctrl+P  Pin    Esc  Close"));
     general->addStretch();
 

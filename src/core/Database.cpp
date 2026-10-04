@@ -32,11 +32,14 @@ ContentType typeFromString(const QString& s) {
     return ContentType::Text;
 }
 
-QDateTime parseUtc(const QString& s) {
-    QDateTime dt = QDateTime::fromString(s, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
-    dt.setTimeZone(QTimeZone(QTimeZone::UTC));
-    return dt;
-}
+// created_at is read as epoch seconds. Parsing its text form went through the
+// system time zone for every row, which cost more than the query itself.
+#define CREATED_AT_EPOCH "CAST(strftime('%s', created_at) AS INTEGER)"
+// Must be written identically in the list index and the list query, or SQLite
+// will not answer the query from the index. 400 is Database::kPreviewChars.
+#define PREVIEW_EXPR "substr(content, 1, 400)"
+#define IS_LONG_EXPR "length(content) > 400"
+static_assert(Database::kPreviewChars == 400, "update PREVIEW_EXPR and IS_LONG_EXPR");
 
 } // namespace
 
@@ -96,6 +99,12 @@ bool Database::createSchema() {
 
     q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_created_at ON clipboard_history(created_at DESC)"));
     q.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_pinned ON clipboard_history(is_pinned)"));
+    // Everything a list row shows, in list order. Clip bodies live in overflow
+    // pages that are slow to walk; with this index the list never touches them.
+    q.exec(QStringLiteral(
+        "CREATE INDEX IF NOT EXISTS idx_list_rows ON clipboard_history("
+        "is_pinned DESC, created_at DESC, id DESC, content_type, source_app, image_path, sensitive, "
+        PREVIEW_EXPR ", " IS_LONG_EXPR ")"));
 
     q.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS ignored_apps ("
                           "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -176,17 +185,19 @@ ClipEntry Database::entryFromQuery(const QSqlQuery& q) {
     e.content   = q.value(1).toString();
     e.sourceApp = q.value(2).toString();
     e.type      = typeFromString(q.value(3).toString());
-    e.createdAt = parseUtc(q.value(4).toString());
+    e.createdAt = QDateTime::fromSecsSinceEpoch(q.value(4).toLongLong(), QTimeZone(QTimeZone::UTC));
     e.pinned    = q.value(5).toInt() != 0;
     e.imagePath = q.value(6).toString();
     e.sensitive = q.value(7).toInt() != 0;
     return e;
 }
 
-QVector<ClipEntry> Database::search(const QString& query, int limit, ClipFilter filter) {
+QVector<ClipEntry> Database::search(const QString& query, int limit, ClipFilter filter, bool previews) {
     QString sql = QStringLiteral(
-        "SELECT id, content, source_app, content_type, created_at, is_pinned, image_path, sensitive "
-        "FROM clipboard_history WHERE 1=1");
+        "SELECT id, %1, source_app, content_type, " CREATED_AT_EPOCH ", is_pinned, image_path, sensitive, %2 "
+        "FROM clipboard_history WHERE 1=1").arg(
+            previews ? QStringLiteral(PREVIEW_EXPR) : QStringLiteral("content"),
+            previews ? QStringLiteral(IS_LONG_EXPR) : QStringLiteral("0"));
     switch (filter) {
         case ClipFilter::Pinned: sql += QStringLiteral(" AND is_pinned = 1"); break;
         case ClipFilter::Text: sql += QStringLiteral(" AND content_type != 'image'"); break;
@@ -226,15 +237,18 @@ QVector<ClipEntry> Database::search(const QString& query, int limit, ClipFilter 
         qWarning("ClipStream search failed: %s", qPrintable(q.lastError().text()));
         return out;
     }
-    while (q.next())
-        out.append(entryFromQuery(q));
+    while (q.next()) {
+        ClipEntry entry = entryFromQuery(q);
+        entry.truncated = q.value(8).toInt() != 0;
+        out.append(entry);
+    }
     return out;
 }
 
 std::optional<ClipEntry> Database::entryById(qint64 id) {
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
-        "SELECT id, content, source_app, content_type, created_at, is_pinned, image_path, sensitive "
+        "SELECT id, content, source_app, content_type, " CREATED_AT_EPOCH ", is_pinned, image_path, sensitive "
         "FROM clipboard_history WHERE id = ?"));
     q.addBindValue(id);
     if (q.exec() && q.next())

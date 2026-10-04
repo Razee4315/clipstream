@@ -12,6 +12,7 @@
 #include "ui/IconFactory.h"
 #include "ui/RowActionsBar.h"
 #include "ui/SettingsDialog.h"
+#include "ui/ThumbnailCache.h"
 
 #include <QApplication>
 #include <QButtonGroup>
@@ -29,10 +30,12 @@
 #include <QDir>
 #include <QEvent>
 #include <QFile>
-#include <QGraphicsDropShadowEffect>
+#include <QPainter>
+#include <QSignalBlocker>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QEasingCurve>
+#include <QElapsedTimer>
 #include <QInputDialog>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
@@ -77,6 +80,22 @@ QString toTitleCase(const QString& s) {
     return out;
 }
 
+// Windows reports positions in native pixels; Qt places windows in scaled ones.
+bool toLogical(const QRect& native, QRect* logical, QScreen** screen) {
+    if (native.isEmpty()) return false;
+    for (QScreen* candidate : QGuiApplication::screens()) {
+        const qreal scale = candidate->devicePixelRatio();
+        const QRect geometry = candidate->geometry();
+        if (!QRectF(geometry.topLeft(), QSizeF(geometry.size()) * scale).contains(native.center()))
+            continue;
+        const QPointF topLeft = QPointF(geometry.topLeft()) + QPointF(native.topLeft() - geometry.topLeft()) / scale;
+        *logical = QRect(topLeft.toPoint(), (QSizeF(native.size()) / scale).toSize().expandedTo(QSize(1, 1)));
+        *screen = candidate;
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 OverlayWindow::OverlayWindow(Database* db, ClipboardMonitor* monitor, QWidget* parent)
@@ -105,12 +124,6 @@ void OverlayWindow::buildUi() {
     m_card = new QWidget(this);
     m_card->setObjectName(QStringLiteral("card"));
     outer->addWidget(m_card);
-
-    auto* shadow = new QGraphicsDropShadowEffect(m_card);
-    shadow->setBlurRadius(40);
-    shadow->setOffset(0, 8);
-    shadow->setColor(QColor(0, 0, 0, 170));
-    m_card->setGraphicsEffect(shadow);
 
     auto* col = new QVBoxLayout(m_card);
     col->setContentsMargins(Theme::S4, Theme::S4, Theme::S4, Theme::S3);
@@ -210,6 +223,8 @@ void OverlayWindow::buildUi() {
     m_list->setAccessibleName(QStringLiteral("Clipboard history"));
     m_list->setModel(m_model);
     m_list->setItemDelegate(m_delegate);
+    connect(m_delegate->thumbnails(), &ThumbnailCache::ready,
+            m_list->viewport(), QOverload<>::of(&QWidget::update));
     m_list->setFrameShape(QFrame::NoFrame);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
     m_list->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -274,13 +289,23 @@ void OverlayWindow::buildUi() {
     footerRow->addWidget(m_previewBtn);
     col->addLayout(footerRow);
 
-    connect(m_search, &QLineEdit::textChanged, this, [this] { reload(); selectRow(0); });
+    // Searching scans clip bodies. That is instant for an ordinary history; with
+    // megabytes of copied text it is not, so then wait for a pause in typing
+    // instead of running once per keystroke.
+    m_searchDelay = new QTimer(this);
+    m_searchDelay->setSingleShot(true);
+    m_searchDelay->setInterval(70);
+    connect(m_searchDelay, &QTimer::timeout, this, [this] { reload(); selectRow(0); });
+    connect(m_search, &QLineEdit::textChanged, this, [this] {
+        if (m_lastQueryMs < 25) { m_searchDelay->stop(); reload(); selectRow(0); }
+        else m_searchDelay->start();
+    });
 
     setFixedSize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
                  Theme::OverlayHeight + 2 * Theme::ShadowMargin);
 
     m_fade = new QPropertyAnimation(this, "windowOpacity", this);
-    m_fade->setDuration(110);
+    m_fade->setDuration(80);
     m_fade->setStartValue(0.0);
     m_fade->setEndValue(1.0);
     m_fade->setEasingCurve(QEasingCurve::OutCubic);
@@ -356,7 +381,10 @@ void OverlayWindow::updateCaptureState() {
 void OverlayWindow::reload() {
     const int keepRow = currentRow();
     const qint64 keepId = currentEntry() ? currentEntry()->id : -1;
-    m_model->setEntries(m_db->search(m_search->text(), 200, m_filter));
+    QElapsedTimer queryTime;
+    queryTime.start();
+    m_model->setEntries(m_db->search(m_search->text(), 200, m_filter, true));
+    m_lastQueryMs = queryTime.elapsed();
     const int count = m_model->rowCount();
     m_count->setText(QStringLiteral("%1%2 %3").arg(count).arg(count == 200 ? QStringLiteral("+") : QString())
         .arg(m_search->text().trimmed().isEmpty() ? QStringLiteral("clips") : QStringLiteral("results")));
@@ -398,9 +426,18 @@ const ClipEntry* OverlayWindow::currentEntry() const {
     return m_model->isValidRow(row) ? &m_model->entryAt(row) : nullptr;
 }
 
-void OverlayWindow::resizeOverlay() {
+std::optional<ClipEntry> OverlayWindow::currentFullEntry() const {
+    const ClipEntry* e = currentEntry();
+    if (!e)
+        return std::nullopt;
+    if (!e->truncated)
+        return *e;
+    return m_db->entryById(e->id);
+}
+
+void OverlayWindow::resizeOverlay(const QScreen* screen) {
     const bool comfortable = m_db->setting(QStringLiteral("overlay_size")) == QLatin1String("comfortable");
-    const QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+    if (!screen) screen = isVisible() ? this->screen() : QGuiApplication::screenAt(QCursor::pos());
     if (!screen) screen = QGuiApplication::primaryScreen();
     const QSize available = screen->availableGeometry().size();
     setFixedSize(qMin((comfortable ? 520 : Theme::OverlayWidth) + 2 * Theme::ShadowMargin, available.width()),
@@ -427,23 +464,38 @@ void OverlayWindow::showAtCursor() {
     m_pasteTarget = platform::capturePasteTarget();
     m_browsingWithoutFocus = m_pasteTarget.window != 0;
     platform::setPopupNonActivating(winId(), m_browsingWithoutFocus);
-    m_search->clear();          // textChanged → reload() with full history
+    // Every open starts from the full, unfiltered history, loaded once.
+    {
+        const QSignalBlocker quiet(m_search);
+        m_search->clear();
+    }
+    m_filter = ClipFilter::All;
+    m_filters->button(0)->setChecked(true);
     reload();
     selectRow(0);
 
+    // Open beside the text caret when the destination reports one, like the
+    // Windows clipboard panel does; otherwise beside the mouse pointer.
+    QScreen* screen = nullptr;
+    QRect caret;
+    const bool wantCaret = m_db->setting(QStringLiteral("popup_anchor")) != QLatin1String("mouse");
+    const bool atCaret = wantCaret && toLogical(platform::caretRect(m_pasteTarget), &caret, &screen);
     const QPoint cursor = QCursor::pos();
-    QScreen* screen = QGuiApplication::screenAt(cursor);
+    if (!atCaret)
+        screen = QGuiApplication::screenAt(cursor);
     if (!screen)
         screen = QGuiApplication::primaryScreen();
     const QRect area = screen->availableGeometry();
 
-    resizeOverlay();
-    int x = cursor.x() - width() / 2;
-    int y = cursor.y() + 12;
-    x = qBound(area.left(), x, area.right() - width() + 1);
-    if (y + height() > area.bottom())
-        y = cursor.y() - height() - 12;
-    y = qBound(area.top(), y, area.bottom() - height() + 1);
+    resizeOverlay(screen);
+    const int gutter = Theme::ShadowMargin; // transparent margin around the card
+    const QRect anchor = atCaret ? caret : QRect(cursor, QSize(1, 16));
+    int x = anchor.left() - gutter;
+    int y = anchor.bottom() + 6 - gutter;
+    if (y + height() - gutter > area.bottom())
+        y = anchor.top() - 6 - height() + gutter; // no room below: open above
+    x = qBound(area.left(), x, qMax(area.left(), area.right() - width() + 1));
+    y = qBound(area.top(), y, qMax(area.top(), area.bottom() - height() + 1));
 
     move(x, y);
     setWindowOpacity(0.0); // fade in from transparent
@@ -455,6 +507,40 @@ void OverlayWindow::showAtCursor() {
     // The list lays out during show(); reposition the action bar once geometry
     // is final, otherwise it lands in the wrong spot on the very first open.
     QTimer::singleShot(0, this, [this] { positionActionsBar(); });
+}
+
+// The first show otherwise pays for style polish, layout, fonts and icons while
+// the user is waiting for the popup.
+void OverlayWindow::warmUp() {
+    platform::prepareCaretLookup();
+    reload();
+    winId();
+    ensurePolished();
+    grab();
+}
+
+// The shadow is painted from a cached pixmap. It used to be a live blur effect,
+// which re-rendered and re-blurred the whole card for every hover and click.
+void OverlayWindow::paintEvent(QPaintEvent*) {
+    const qreal scale = devicePixelRatioF();
+    const QSize pixels = (QSizeF(size()) * scale).toSize();
+    if (m_shadow.size() != pixels || !qFuzzyCompare(m_shadow.devicePixelRatio(), scale)) {
+        m_shadow = QPixmap(pixels);
+        m_shadow.setDevicePixelRatio(scale);
+        m_shadow.fill(Qt::transparent);
+        QPainter shadow(&m_shadow);
+        shadow.setRenderHint(QPainter::Antialiasing, true);
+        shadow.setPen(Qt::NoPen);
+        const QRectF card = QRectF(m_card->geometry()).translated(0, 3);
+        const int spread = Theme::ShadowMargin - 2;
+        for (int i = spread; i >= 1; --i) {
+            const qreal closeness = 1.0 - qreal(i) / (spread + 1);
+            shadow.setBrush(QColor(0, 0, 0, qRound(3 + 15 * closeness * closeness)));
+            shadow.drawRoundedRect(card.adjusted(-i, -i, i, i), 18 + i, 18 + i);
+        }
+    }
+    QPainter painter(this);
+    painter.drawPixmap(0, 0, m_shadow);
 }
 
 void OverlayWindow::toggleAtCursor() {
@@ -523,11 +609,11 @@ bool OverlayWindow::putOnClipboard(const ClipEntry& entry, PasteFormat format) {
 }
 
 void OverlayWindow::pasteCurrent(PasteFormat format) {
-    const ClipEntry* e = currentEntry();
-    if (!e || m_pasting)
+    if (m_pasting)
         return;
-    const ClipEntry entry = *e;
-    if (!putOnClipboard(entry, format)) return;
+    const auto entry = currentFullEntry();
+    if (!entry || !putOnClipboard(*entry, format))
+        return;
     finishPaste();
 }
 
@@ -544,10 +630,9 @@ void OverlayWindow::finishPaste() {
 }
 
 void OverlayWindow::copyCurrent() {
-    const ClipEntry* e = currentEntry();
-    if (!e)
+    const auto entry = currentFullEntry();
+    if (!entry || !putOnClipboard(*entry, PasteFormat::Plain))
         return;
-    if (!putOnClipboard(*e, PasteFormat::Plain)) return;
     // Stay open and confirm visually instead of hiding, so the copy feels acknowledged.
     if (m_actions && m_actions->isVisible())
         m_actions->flashCopied();
@@ -562,15 +647,15 @@ void OverlayWindow::pinCurrent() {
 }
 
 void OverlayWindow::editCurrent() {
-    const ClipEntry* e = currentEntry();
-    if (!e || e->isImage())
+    const auto entry = currentFullEntry();
+    if (!entry || entry->isImage())
         return;
-    const qint64 id = e->id;
+    const qint64 id = entry->id;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     activateForSearch();
     bool ok = false;
     const QString text = QInputDialog::getMultiLineText(
-        this, QStringLiteral("Edit clip"), QStringLiteral("Content:"), e->content, &ok);
+        this, QStringLiteral("Edit clip"), QStringLiteral("Content:"), entry->content, &ok);
     if (ok) {
         m_db->updateContent(id, text);
         reload();
@@ -609,7 +694,7 @@ void OverlayWindow::showFormatMenu() {
 }
 
 void OverlayWindow::showContextMenu(const QPoint& globalPos) {
-    const ClipEntry* e = currentEntry();
+    const auto e = currentFullEntry();
     if (!e)
         return;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
@@ -666,7 +751,8 @@ void OverlayWindow::addSmartActions(QMenu& menu, const ClipEntry& entry) {
         }
     }
 
-    if (const auto result = MathEval::evaluate(entry.content)) {
+    // Arithmetic is short; do not scan a megabyte of copied text for it.
+    if (const auto result = entry.content.size() <= 256 ? MathEval::evaluate(entry.content) : std::nullopt) {
         const QString text = QString::number(*result, 'g', 12);
         menu.addAction(QStringLiteral("Paste result = %1").arg(text), [this, text] {
             if (writeClipboard([&text](QClipboard* cb) { cb->setText(text); }))
@@ -680,7 +766,7 @@ void OverlayWindow::addSmartActions(QMenu& menu, const ClipEntry& entry) {
 }
 
 void OverlayWindow::runPrimarySmartAction() {
-    const ClipEntry* e = currentEntry();
+    const auto e = currentFullEntry();
     if (!e)
         return;
     if (e->type == ContentType::Url) {
@@ -725,8 +811,9 @@ void OverlayWindow::newSnippet() {
 }
 
 void OverlayWindow::previewCurrent() {
-    if (!currentEntry()) return;
-    const ClipEntry entry = *currentEntry();
+    const auto full = currentFullEntry();
+    if (!full) return;
+    const ClipEntry entry = *full;
     QScopedValueRollback<bool> dialogGuard(m_childDialogOpen, true);
     activateForSearch();
     QDialog dialog(this);
@@ -747,7 +834,8 @@ void OverlayWindow::previewCurrent() {
     if (entry.isImage()) {
         auto* scroll = new QScrollArea(&dialog);
         auto* image = new QLabel(scroll);
-        const QPixmap pixmap(entry.imagePath);
+        // Not QPixmap(path): that parks the full-size image in the shared pixmap cache.
+        const QPixmap pixmap = QPixmap::fromImage(QImage(entry.imagePath));
         if (pixmap.isNull()) image->setText(QStringLiteral("This image is no longer available on disk."));
         else image->setPixmap(pixmap);
         image->setAlignment(Qt::AlignCenter);

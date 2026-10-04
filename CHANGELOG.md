@@ -2,6 +2,24 @@
 
 All notable changes to ClipStream.
 
+## [0.3.2] - 2026-10-05
+
+### Changed
+- The popup opens at the text cursor, like the Windows clipboard panel, and falls back to
+  the mouse pointer when the app does not report one (Settings can force the pointer)
+- Every open starts on All clips with an empty search
+
+### Fixed
+- Filter, selection, scrolling and search were slow: about 75-120 ms per filter click on a
+  small history and up to a second with large clips or screenshots; now about 10-20 ms
+  - the drop shadow was a live blur that re-rendered the whole popup on every repaint
+  - every row's timestamp went through the system time zone on each reload and repaint
+  - long clips were loaded and laid out in full just to show one line
+  - screenshots were decoded on the UI thread, repeatedly
+  - the row action bar was restyled on every selection change
+- Saving a captured screenshot no longer stalls the hotkey and popup
+- The first open after startup is no longer slower than the rest
+
 ## [0.3.1] - 2026-10-05
 
 ### Changed

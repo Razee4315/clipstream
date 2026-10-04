@@ -1,26 +1,26 @@
-## ClipStream 0.3.1
+## ClipStream 0.3.2
 
-A smaller popup that stays out of the way, and pasting that goes where you expect.
+A speed release, plus the popup now opens where you are typing.
 
-### What’s new
-- **Paste into what you had selected.** Ctrl+Shift+V opens the popup without taking focus, so your app and selection stay put. Click a clip once, or press Enter, to replace the selection.
-- **Compact popup.** 420 × 480 instead of 560 × 640, with tighter rows. Prefer the roomier layout? Choose Comfortable in Settings.
-- **Clearer Settings.** General, Privacy, and History tabs. Changes save automatically.
-- **Clear unpinned history** keeps your pinned clips and snippets. Deleting everything is a separate action.
-- Clips that password managers mark as private are never saved.
+### Faster everywhere
+Switching filters, moving through the list, scrolling and searching were sluggish, and the list could briefly show stale clips after a click. On the test machine (125% display scaling) a filter click went from about 75-120 ms to about 10-20 ms with a small history, and from up to 950 ms to about 15-25 ms with megabyte-sized clips and full-screen screenshots in the history.
 
-### Fixes
-- **No more wrong pastes.** If another program had the clipboard open at the wrong moment, ClipStream could paste whatever was on the clipboard before instead of the clip you picked. It now confirms the clip is on the clipboard first, retries briefly, and pastes nothing if it cannot.
-- Searching or opening Settings no longer loses the paste destination.
-- Paste waits until Ctrl/Shift/Alt are released and never sends to a different window. If it cannot paste, the clip stays copied and a tray notice tells you to press Ctrl+V.
-- History limits now apply as clips arrive, not only at startup.
-- A second copy of ClipStream can no longer start alongside the first.
+What changed:
+- The popup shadow is drawn once instead of being re-blurred on every repaint.
+- Timestamps no longer go through a time-zone conversion for every row.
+- The list loads a short preview of each clip. The full clip is fetched when you paste, copy, preview or edit it.
+- Screenshot thumbnails are decoded in the background, and captured screenshots are saved in the background.
+- The first open after startup is prepared ahead of time.
 
-### Good to know
-- Typing goes to your app until you press Ctrl+F or click the search box.
-- Windows does not let a normal app paste into one running as administrator. ClipStream leaves the clip copied and tells you.
+### Opens at the text cursor
+Like the Windows clipboard panel, the popup opens just below the text cursor. If the app does not report a cursor, it opens at the mouse pointer. Prefer the pointer always? Settings > General > Open popup.
+
+Good to know: browsers and other Chromium-based apps only report the text cursor through their accessibility support. ClipStream asks for it and waits at most 70 ms. The first open in a browser window, or a very heavy page, may therefore still open at the mouse pointer.
+
+### Also
+- Every open starts on All clips with an empty search.
 
 ### Install
-Download **ClipStream-Setup-0.3.1.exe** below and run it. Open ClipStream with **Ctrl+Shift+V**. Windows x64; no administrator access required.
+Download **ClipStream-Setup-0.3.2.exe** below and run it. Open ClipStream with **Ctrl+Shift+V**. Windows x64; no administrator access required.
 
-Validated with a Windows release build, 13 automated regression tests, and 9 focus-and-paste tests that send real input to a native Windows edit control. Other applications, including browsers, Office, and administrator windows, were not tested individually.
+Validated with a Windows release build, 16 automated regression tests, and 10 focus-and-paste tests that send real input to a native Windows edit control. Cursor positioning was checked against a native edit control and a Chromium window; other applications were not tested individually.

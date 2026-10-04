@@ -4,6 +4,7 @@
 #include "ui/OverlayWindow.h"
 #include "ui/HistoryModel.h"
 #include "ui/SettingsDialog.h"
+#include "ui/ThumbnailCache.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -213,6 +214,73 @@ private slots:
         monitor.setPaused(true);
         QTest::qWait(280);
         QCOMPARE(imageSpy.size(), 0);
+    }
+
+    // The list only loads the start of a long clip; using it must still give all of it.
+    void longClipsListAsPreviewsButPasteInFull() {
+        const QString longText = QStringLiteral("0123456789").repeated(5000) + QStringLiteral("THE END");
+        const auto id = add(longText);
+        add(QStringLiteral("short clip"));
+        const auto full = db->search(QString());
+        QCOMPARE(full.last().content, longText);
+        QVERIFY(!full.last().truncated);
+        const auto previews = db->search(QString(), 200, ClipFilter::All, true);
+        QCOMPARE(previews.size(), 2);
+        QCOMPARE(previews.first().content, QStringLiteral("short clip"));
+        QVERIFY(!previews.first().truncated);
+        QCOMPARE(previews.last().id, id);
+        QVERIFY(previews.last().truncated);
+        QCOMPARE(previews.last().content, longText.left(Database::kPreviewChars));
+        // Timestamps are read as epoch seconds; a fresh clip must read as "now".
+        QVERIFY(qAbs(previews.last().createdAt.secsTo(QDateTime::currentDateTimeUtc())) < 10);
+        QCOMPARE(db->entryById(id)->content, longText);
+        QVERIFY(qAbs(db->entryById(id)->createdAt.secsTo(QDateTime::currentDateTimeUtc())) < 10);
+        // Searching still looks at the whole clip, not just the preview.
+        QCOMPARE(db->search(QStringLiteral("THE END"), 200, ClipFilter::All, true).size(), 1);
+
+        OverlayWindow overlay(db.get(), nullptr);
+        overlay.showAtCursor();
+        QTest::qWait(120);
+        auto* list = overlay.findChild<QListView*>();
+        const auto rect = list->visualRect(list->model()->index(1, 0));
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, rect.topLeft() + QPoint(80, 16));
+        QCOMPARE(QApplication::clipboard()->text(), longText);
+    }
+
+    void everyOpenStartsUnfiltered() {
+        add(QStringLiteral("A text clip"));
+        OverlayWindow overlay(db.get(), nullptr);
+        overlay.showAtCursor();
+        QTest::qWait(60);
+        auto* list = overlay.findChild<QListView*>();
+        const auto filters = overlay.findChildren<QPushButton*>(QStringLiteral("filter"));
+        QTest::mouseClick(filters[3], Qt::LeftButton); // Images: nothing to show
+        QCOMPARE(list->model()->rowCount(), 0);
+        overlay.findChild<QLineEdit*>(QStringLiteral("search"))->setText(QStringLiteral("zzz"));
+        overlay.hide();
+        overlay.showAtCursor();
+        QCOMPARE(list->model()->rowCount(), 1);
+        QVERIFY(filters[0]->isChecked());
+        QVERIFY(overlay.findChild<QLineEdit*>(QStringLiteral("search"))->text().isEmpty());
+    }
+
+    // Thumbnails are decoded off the GUI thread: a placeholder first, then the image.
+    void thumbnailsLoadInTheBackground() {
+        const QString path = directory.path() + QStringLiteral("/thumb-test.png");
+        QImage image(640, 360, QImage::Format_RGB32);
+        image.fill(Qt::darkCyan);
+        QVERIFY(image.save(path));
+        ThumbnailCache cache;
+        QSignalSpy ready(&cache, &ThumbnailCache::ready);
+        QVERIFY(cache.get(path).isNull());
+        QTRY_COMPARE(ready.size(), 1);
+        const QPixmap thumbnail = cache.get(path);
+        QVERIFY(!thumbnail.isNull());
+        QCOMPARE(thumbnail.width(), thumbnail.height());
+        QCOMPARE(ready.size(), 1); // served from memory, not decoded again
+        QVERIFY(cache.get(directory.path() + QStringLiteral("/missing.png")).isNull());
+        QTRY_COMPARE(ready.size(), 2);
+        QVERIFY(cache.get(directory.path() + QStringLiteral("/missing.png")).isNull());
     }
 
     void clipsMarkedPrivateAreNotCaptured() {

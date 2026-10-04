@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ClipStream VERSION 0.3.1 LANGUAGES CXX)
+project(ClipStream VERSION 0.3.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,6 +66,8 @@ set(SOURCES
     src/ui/IconFactory.h
     src/ui/RowActionsBar.cpp
     src/ui/RowActionsBar.h
+    src/ui/ThumbnailCache.cpp
+    src/ui/ThumbnailCache.h
     # Listed so AUTOMOC processes the Q_OBJECT header whose impl lives in a
     # differently-named platform .cpp (HotkeyManager_win.cpp / _stub.cpp).
     src/platform/PopupInput.h
@@ -86,7 +88,9 @@ target_link_libraries(ClipStream PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg)
 if(WIN32)
     # APIs we call directly: RegisterHotKey/SendInput/GetForegroundWindow (user32),
     # OpenProcess/QueryFullProcessImageNameW (kernel32, auto-linked).
-    target_link_libraries(ClipStream PRIVATE user32)
+    # ole32/oleaut32/uuid: UI Automation, for the text caret of apps that draw
+    # their own (browsers, Electron).
+    target_link_libraries(ClipStream PRIVATE user32 ole32 oleaut32 uuid)
 endif()
 
 include(CTest)
@@ -112,6 +116,6 @@ if(BUILD_TESTING)
         qt_add_executable(ClipStreamDesktopCheck tests/DesktopCheck.cpp ${DESKTOP_SOURCES})
         set_target_properties(ClipStreamDesktopCheck PROPERTIES EXCLUDE_FROM_ALL TRUE)
         target_include_directories(ClipStreamDesktopCheck PRIVATE src resources)
-        target_link_libraries(ClipStreamDesktopCheck PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test user32)
+        target_link_libraries(ClipStreamDesktopCheck PRIVATE Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Test user32 ole32 oleaut32 uuid)
     endif()
 endif()

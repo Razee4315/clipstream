@@ -3,8 +3,10 @@
 #include "core/ClipEntry.h"
 #include "platform/PasteSimulator.h"
 
+#include <QPixmap>
 #include <QWidget>
 #include <functional>
+#include <optional>
 
 class Database;
 class ClipboardMonitor;
@@ -22,6 +24,8 @@ class QButtonGroup;
 class QPushButton;
 class PopupInput;
 class QClipboard;
+class QScreen;
+class QTimer;
 
 // The frameless launcher overlay: search box + history list + keyboard-driven
 // actions (paste, format-paste, pin, edit, delete, copy). Talks to the Database
@@ -36,11 +40,13 @@ public:
     void toggleAtCursor();
     void reload();      // re-run the current query and refresh the list
     void applyTheme();  // (re)build the stylesheet from the current palette
+    void warmUp();      // pay the one-off first-show costs ahead of time
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void changeEvent(QEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void hideEvent(QHideEvent* event) override;
     bool nativeEvent(const QByteArray& type, void* message, qintptr* result) override;
 
@@ -52,6 +58,7 @@ private:
     int currentRow() const;
     bool hasSelection() const;
     const ClipEntry* currentEntry() const;
+    std::optional<ClipEntry> currentFullEntry() const;
 
     void pasteCurrent(PasteFormat format = PasteFormat::Plain);
     void copyCurrent();
@@ -69,7 +76,7 @@ private:
     void finishPaste();
     bool writeClipboard(const std::function<void(QClipboard*)>& write);
     void hideIfAbandoned();
-    void resizeOverlay();
+    void resizeOverlay(const QScreen* screen = nullptr);
     void runPrimarySmartAction();
     void addSmartActions(QMenu& menu, const ClipEntry& entry);
 
@@ -103,6 +110,9 @@ private:
     bool m_pasting = false;
     platform::PasteTarget m_pasteTarget;
     PopupInput* m_popupInput = nullptr;
+    QPixmap m_shadow; // drawn once per size, not re-blurred on every repaint
+    QTimer* m_searchDelay = nullptr;
+    qint64 m_lastQueryMs = 0;
 signals:
     void pasteFailed();
     void clipboardBusy();

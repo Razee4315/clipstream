@@ -26,6 +26,7 @@ signals:
 
 private:
     QToolButton* makeButton(const QString& tip);
+    void updatePinButton();
 
     QToolButton* m_pin = nullptr;
     QToolButton* m_copy = nullptr;

@@ -47,6 +47,18 @@ built by default and does not run in CI. Results go to
 `build/artifacts/windows-paste-results.xml`; the `OleSetClipboard: Failed` warnings
 there come from the test that deliberately holds the clipboard open.
 
+Two more modes help when working on speed or popup placement. Neither sends input:
+
+```powershell
+./build/ClipStreamDesktopCheck.exe --bench            # timings for a heavy synthetic history
+./build/ClipStreamDesktopCheck.exe --bench <folder>   # timings for a copy of a real data folder
+./build/ClipStreamDesktopCheck.exe --caret            # where the foreground app reports its text cursor
+```
+
+`--bench` shows the popup in a corner for a few seconds and writes
+`build/artifacts/bench.txt`. Filter clicks, selection and scrolling should stay
+well under 30 ms. Point it at a copy of a data folder, never the live one.
+
 The scratch editor is a plain Win32 edit control. A pass there does not prove
 every application behaves the same, so test changes to `src/platform/win/` in a
 few real apps as well. Running `ClipStreamDesktopCheck.exe` with no arguments opens
