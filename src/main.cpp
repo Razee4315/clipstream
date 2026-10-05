@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     app.setApplicationName(QStringLiteral("ClipStream"));
     app.setApplicationDisplayName(QStringLiteral("ClipStream"));
     app.setOrganizationName(QStringLiteral("ClipStream"));
-    app.setWindowIcon(QIcon(QStringLiteral(":/icon.png")));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icon.ico")));
     app.setQuitOnLastWindowClosed(false); // the app lives in the system tray
 
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ClipStream VERSION 0.3.2 LANGUAGES CXX)
+project(ClipStream VERSION 0.3.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,9 @@ target_link_libraries(ClipStreamLogo PRIVATE Qt6::Gui Qt6::Svg)
 set(PLATFORM_SOURCES)
 if(WIN32)
     enable_language(RC)
+    # The resource compiler does not reliably track referenced icon files.
+    set_source_files_properties(resources/clipstream.rc PROPERTIES
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.ico")
     list(APPEND PLATFORM_SOURCES
         src/platform/win/HotkeyManager_win.cpp
         src/platform/win/ForegroundApp_win.cpp

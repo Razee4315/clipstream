@@ -3,7 +3,7 @@
 ; SourceDir is set to the project root so all paths below are root-relative.
 
 #define MyAppName "ClipStream"
-#define MyAppVersion "0.3.2"
+#define MyAppVersion "0.3.3"
 #define MyAppPublisher "Saqlain Abbas"
 #define MyAppURL "https://github.com/Razee4315/clipstream"
 #define MyAppExeName "ClipStream.exe"
@@ -28,6 +28,10 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+DisableWelcomePage=no
+WizardImageFile=resources\installer-wizard.bmp
+WizardSmallImageFile=resources\installer-header.bmp
+WizardImageStretch=yes
 ; Close a running instance before installing/updating.
 CloseApplications=yes
 ArchitecturesAllowed=x64compatible
@@ -45,7 +49,7 @@ Source: "dist\ClipStream\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversi
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]

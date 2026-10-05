@@ -1,6 +1,11 @@
 <RCC>
     <qresource prefix="/">
         <file>icon.png</file>
+        <file>icon.ico</file>
+        <file>logo.svg</file>
+        <file>logo-dark.svg</file>
+        <file>wordmark.svg</file>
+        <file>wordmark-dark.svg</file>
         <file>chevron-down.svg</file>
         <file>chevron-up.svg</file>
         <file>check.svg</file>

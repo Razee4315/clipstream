@@ -2,6 +2,17 @@
 
 All notable changes to ClipStream.
 
+## [0.3.3] - 2026-10-05
+
+### Changed
+- Concept 03 logo and Sora lettering across the popup, Settings, tray, and Windows icons
+- Matching installer welcome artwork and header logo
+- Theme-aware README logo, matching badges, and refreshed app screenshot
+- Short release summaries with links to [detailed release notes](docs/releases/0.3.3.md)
+
+### Fixed
+- Rebuild the embedded Windows icon when the source icon changes
+
 ## [0.3.2] - 2026-10-05
 
 ### Changed

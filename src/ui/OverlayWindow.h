@@ -87,6 +87,8 @@ private:
     ClipboardMonitor* m_monitor = nullptr;
 
     QWidget* m_card = nullptr;
+    QLabel* m_brand = nullptr;
+    QLabel* m_brandMark = nullptr;
     QLineEdit* m_search = nullptr;
     QLabel* m_searchIcon = nullptr;
     QToolButton* m_settingsBtn = nullptr;

@@ -1,14 +1,16 @@
 <p align="center">
-  <img src="resources/logo.svg" width="88" alt="ClipStream logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="resources/readme-logo-dark.svg">
+    <img src="resources/readme-logo.svg" width="400" alt="ClipStream — clipboard manager">
+  </picture>
 </p>
-<h1 align="center">ClipStream</h1>
 <p align="center">Your clipboard, with a memory.</p>
 <p align="center">
   A fast, native Windows clipboard manager. Find it. Preview it. Paste it.
 </p>
 <p align="center">
-  <a href="https://github.com/Razee4315/clipstream/releases/latest"><img src="https://img.shields.io/github/v/release/Razee4315/clipstream?color=2563eb&label=download" alt="Latest release"></a>
-  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-2563eb" alt="Windows 10 and 11">
+  <a href="https://github.com/Razee4315/clipstream/releases/latest"><img src="https://img.shields.io/github/v/release/Razee4315/clipstream?color=e4472b&label=download" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-e4472b" alt="Windows 10 and 11">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-64748b" alt="MIT license"></a>
 </p>
 <p align="center">
@@ -18,6 +20,8 @@
 ## Get started
 
 [**Download ClipStream for Windows →**](https://github.com/Razee4315/clipstream/releases/latest)
+
+[What’s new in 0.3.3](docs/releases/0.3.3.md)
 
 Run the installer, copy something, then press **Ctrl+Shift+V** and click a clip to paste it.
 ClipStream stays in your system tray.

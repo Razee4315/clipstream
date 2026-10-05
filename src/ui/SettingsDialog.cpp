@@ -99,7 +99,24 @@ void SettingsDialog::buildUi() {
     root->setSpacing(12);
     auto* title = new QLabel(QStringLiteral("Settings"), this);
     title->setStyleSheet(QStringLiteral("font-size:20px; font-weight:700;"));
-    root->addWidget(title);
+    auto* heading = new QHBoxLayout;
+    heading->addWidget(title);
+    heading->addStretch();
+    auto* mark = new QLabel(this);
+    mark->setFixedSize(24, 24);
+    mark->setPixmap(QIcon(Theme::isDark() ? QStringLiteral(":/logo-dark.svg")
+                                        : QStringLiteral(":/logo.svg"))
+                        .pixmap(mark->size(), devicePixelRatioF()));
+    heading->addWidget(mark);
+    auto* brand = new QLabel(this);
+    brand->setAccessibleName(QStringLiteral("ClipStream"));
+    brand->setFixedSize(112, 24);
+    brand->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    brand->setPixmap(QIcon(Theme::isDark() ? QStringLiteral(":/wordmark-dark.svg")
+                                         : QStringLiteral(":/wordmark.svg"))
+                         .pixmap(brand->size(), devicePixelRatioF()));
+    heading->addWidget(brand);
+    root->addLayout(heading);
     auto* subtitle = new QLabel(QStringLiteral("Make ClipStream work your way."), this);
     subtitle->setObjectName(QStringLiteral("muted"));
     root->addWidget(subtitle);

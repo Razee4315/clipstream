@@ -65,7 +65,7 @@ bool AppController::initialize() {
 }
 
 void AppController::setupTray() {
-    m_tray = new QSystemTrayIcon(QIcon(QStringLiteral(":/icon.png")), this);
+    m_tray = new QSystemTrayIcon(QIcon(QStringLiteral(":/icon.ico")), this);
     m_tray->setToolTip(QStringLiteral("ClipStream — Clipboard Manager"));
 
     auto* menu = new QMenu(m_overlay.get());

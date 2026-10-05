@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect x="3" y="3" width="122" height="122" rx="26" fill="#F7F6F2" /><g transform="translate(10 10) scale(0.9)"><path d="M24 0H96A24 24 0 0 1 120 24V38H60A22 22 0 0 0 60 82H120V96A24 24 0 0 1 96 120H24A24 24 0 0 1 0 96V24A24 24 0 0 1 24 0Z" fill="#121316" />
+<path d="M60 50H110A10 10 0 0 1 120 60V60A10 10 0 0 1 110 70H60A10 10 0 0 1 50 60V60A10 10 0 0 1 60 50Z" fill="#E4472B" />
+</g></svg>

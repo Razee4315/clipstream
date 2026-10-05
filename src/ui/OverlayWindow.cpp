@@ -130,16 +130,17 @@ void OverlayWindow::buildUi() {
     col->setSpacing(Theme::S2);
 
     auto* header = new QHBoxLayout();
-    auto* brand = new QLabel(QStringLiteral("ClipStream"), m_card);
-    brand->setObjectName(QStringLiteral("brand"));
-    auto* mark = new QLabel(m_card);
-    mark->setObjectName(QStringLiteral("brandMark"));
-    mark->setPixmap(QPixmap(QStringLiteral(":/icon.png")).scaled(28, 28, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    mark->setFixedSize(28, 28);
-    mark->setAlignment(Qt::AlignCenter);
-    header->addWidget(mark);
+    m_brandMark = new QLabel(m_card);
+    m_brandMark->setObjectName(QStringLiteral("brandMark"));
+    m_brandMark->setFixedSize(28, 28);
+    header->addWidget(m_brandMark);
     header->addSpacing(4);
-    header->addWidget(brand);
+    m_brand = new QLabel(m_card);
+    m_brand->setObjectName(QStringLiteral("brand"));
+    m_brand->setAccessibleName(QStringLiteral("ClipStream"));
+    m_brand->setFixedSize(120, 28);
+    m_brand->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    header->addWidget(m_brand);
     header->addStretch();
 
     m_pauseBtn = new QToolButton(m_card);
@@ -315,11 +316,16 @@ void OverlayWindow::buildUi() {
 
 void OverlayWindow::applyTheme() {
     const Theme::Palette& p = Theme::palette();
+    m_brandMark->setPixmap(QIcon(Theme::isDark() ? QStringLiteral(":/logo-dark.svg")
+                                               : QStringLiteral(":/logo.svg"))
+                               .pixmap(m_brandMark->size(), devicePixelRatioF()));
+    m_brand->setPixmap(QIcon(Theme::isDark() ? QStringLiteral(":/wordmark-dark.svg")
+                                           : QStringLiteral(":/wordmark.svg"))
+                           .pixmap(m_brand->size(), devicePixelRatioF()));
     QString css = QStringLiteral(
         "QWidget { color:@text; }"
         "#card { background:@surface; border:1px solid @border; border-radius:18px; }"
-        "#brand { font-size:17px; font-weight:700; letter-spacing:-0.5px; }"
-        "#brandMark { background:transparent; }"
+        "#brand, #brandMark { background:transparent; }"
         "#subtitle, #emptyHint { color:@muted; font-size:12px; }"
         "#search { background:@alt; border:1px solid @border; border-radius:10px;"
         " padding:6px 10px; font-size:13px; selection-background-color:@accent; }"

@@ -22,6 +22,25 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## Brand assets
+
+The SVGs in `resources/` use the rounded C symbol from Logo Concept 03.
+`logo.svg` and `logo-dark.svg` are the compact symbol; `wordmark.svg` and
+`wordmark-dark.svg` contain the full lettering. `app-icon.svg` adds a neutral
+tile so the Windows icon remains visible on both light and dark backgrounds.
+The generator outlines the reference's Sora SemiBold wordmark using the bundled
+OFL-licensed font in `resources/fonts/`, so no installed font is needed at runtime.
+`readme-logo.svg` and `readme-logo-dark.svg` combine the symbol and lettering
+into an aligned horizontal lockup for GitHub.
+After editing the SVGs, regenerate the checked-in PNG, multi-size ICO, and
+installer bitmaps before building the app or installer:
+
+```powershell
+cmake --build build --target ClipStreamLogo
+./build/ClipStreamLogo.exe resources
+cmake --build build
+```
+
 ## Tests
 
 `ctest` runs `ClipStreamTests` on Qt's offscreen platform with a temporary database.
