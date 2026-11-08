@@ -57,6 +57,19 @@
 
 namespace {
 
+class ThemedSizeGrip : public QSizeGrip {
+public:
+    explicit ThemedSizeGrip(QWidget* parent) : QSizeGrip(parent) { setFixedSize(20, 20); }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(Theme::palette().textMuted), 1.5, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(6, 16, 16, 6);
+        painter.drawLine(11, 16, 16, 11);
+    }
+};
+
 QString colorToHsl(const QColor& c) {
     return QStringLiteral("hsl(%1, %2%, %3%)")
         .arg(qMax(0, c.hslHue()))
@@ -301,7 +314,7 @@ void OverlayWindow::buildUi() {
     m_previewBtn->setToolTip(QStringLiteral("Preview full clip · Ctrl+Space"));
     connect(m_previewBtn, &QPushButton::clicked, this, &OverlayWindow::previewCurrent);
     footerRow->addWidget(m_previewBtn);
-    auto* grip = new QSizeGrip(this);
+    auto* grip = new ThemedSizeGrip(this);
     grip->setToolTip(QStringLiteral("Drag to resize"));
     grip->setAccessibleName(QStringLiteral("Resize clipboard window"));
     footerRow->addWidget(grip);
