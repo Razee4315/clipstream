@@ -86,6 +86,8 @@ private:
     Database* m_db = nullptr;
     ClipboardMonitor* m_monitor = nullptr;
 
+    QPoint m_dragOffset;
+    bool m_dragging = false;
     QWidget* m_card = nullptr;
     QLabel* m_brand = nullptr;
     QLabel* m_brandMark = nullptr;

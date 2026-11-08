@@ -49,11 +49,24 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build --output-on-failure
 
+      - name: Build desktop verification tool
+        shell: pwsh
+        run: cmake --build build --target ClipStreamDesktopCheck
+
+      - name: Upload UI test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipStream-UI-checks
+          path: build/artifacts/
+
       - name: Deploy (bundle Qt runtime)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist\ClipStream | Out-Null
           Copy-Item build\ClipStream.exe dist\ClipStream\
+          Copy-Item build\ClipStreamDesktopCheck.exe dist\ClipStream\
+          Copy-Item "$env:QT_ROOT_DIR\bin\Qt6Test.dll" dist\ClipStream\
           windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw dist\ClipStream\ClipStream.exe
           Remove-Item dist\ClipStream\dxcompiler.dll,dist\ClipStream\dxil.dll -ErrorAction SilentlyContinue
 

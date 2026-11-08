@@ -35,6 +35,9 @@ ClipStream stays in your system tray.
 - **Stay in control.** Pause capture, exclude apps, set retention, and mask detected secrets. Clips that password managers mark as private are never saved. History stays on your device.
 - **Feel at home.** Native C++ / Qt 6, keyboard navigation, and eight theme options including System.
 
+Drag the popup header to move it, or use the bottom-right grip to resize it.
+Your size is remembered when the popup closes; choosing a different size preset in Settings resets it.
+
 ## Shortcuts
 
 | Action | Shortcut |

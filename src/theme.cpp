@@ -8,14 +8,14 @@ namespace {
 
 // Palette literals (bg, surface, surfaceAlt, border, accent, textPrimary, textMuted).
 const Palette kDark{
-    QStringLiteral("#161618"), QStringLiteral("#202023"), QStringLiteral("#2b2b30"),
-    QStringLiteral("#34343a"), QStringLiteral("#3b82f6"), QStringLiteral("#f2f2f4"),
-    QStringLiteral("#9a9aa2")};
+    QStringLiteral("#10191d"), QStringLiteral("#182429"), QStringLiteral("#23343a"),
+    QStringLiteral("#35494f"), QStringLiteral("#5dd6ba"), QStringLiteral("#edf6f3"),
+    QStringLiteral("#a4b9bc")};
 
 const Palette kLight{
-    QStringLiteral("#f4f4f6"), QStringLiteral("#ffffff"), QStringLiteral("#ececf0"),
-    QStringLiteral("#d8d8de"), QStringLiteral("#2563eb"), QStringLiteral("#1b1b1f"),
-    QStringLiteral("#6c6c75")};
+    QStringLiteral("#f2f5ef"), QStringLiteral("#ffffff"), QStringLiteral("#edf3ef"),
+    QStringLiteral("#d2dfd8"), QStringLiteral("#087c68"), QStringLiteral("#162c29"),
+    QStringLiteral("#576f68")};
 
 const Palette kMidnight{
     QStringLiteral("#0f1117"), QStringLiteral("#171a23"), QStringLiteral("#20242f"),

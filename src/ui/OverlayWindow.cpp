@@ -15,6 +15,8 @@
 #include "ui/ThumbnailCache.h"
 
 #include <QApplication>
+#include <QMouseEvent>
+#include <QSizeGrip>
 #include <QButtonGroup>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -129,7 +131,13 @@ void OverlayWindow::buildUi() {
     col->setContentsMargins(Theme::S4, Theme::S4, Theme::S4, Theme::S3);
     col->setSpacing(Theme::S2);
 
-    auto* header = new QHBoxLayout();
+    auto* titleBar = new QWidget(m_card);
+    titleBar->setObjectName(QStringLiteral("titleBar"));
+    titleBar->setCursor(Qt::SizeAllCursor);
+    titleBar->setToolTip(QStringLiteral("Drag to move"));
+    titleBar->installEventFilter(this);
+    auto* header = new QHBoxLayout(titleBar);
+    header->setContentsMargins(0, 0, 0, 0);
     m_brandMark = new QLabel(m_card);
     m_brandMark->setObjectName(QStringLiteral("brandMark"));
     m_brandMark->setFixedSize(28, 28);
@@ -163,7 +171,12 @@ void OverlayWindow::buildUi() {
     m_settingsBtn->setAccessibleName(QStringLiteral("Settings"));
     connect(m_settingsBtn, &QToolButton::clicked, this, &OverlayWindow::openSettings);
     header->addWidget(m_settingsBtn);
-    col->addLayout(header);
+    m_brand->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_brandMark->setAttribute(Qt::WA_TransparentForMouseEvents);
+    col->addWidget(titleBar);
+    auto* subtitle = new QLabel(QStringLiteral("Your clipboard, within reach."), m_card);
+    subtitle->setObjectName(QStringLiteral("subtitle"));
+    col->addWidget(subtitle);
     auto* searchRow = new QHBoxLayout();
     m_searchIcon = new QLabel(m_card);
     m_searchIcon->setFixedSize(20, 20);
@@ -173,7 +186,7 @@ void OverlayWindow::buildUi() {
     m_search->setPlaceholderText(QStringLiteral("Search clips or apps…"));
     m_search->setAccessibleName(QStringLiteral("Search clipboard"));
     m_search->setClearButtonEnabled(true);
-    m_search->setMinimumHeight(22);
+    m_search->setMinimumHeight(32);
     m_search->installEventFilter(this);
     searchRow->addWidget(m_search, 1);
     col->addLayout(searchRow);
@@ -288,6 +301,10 @@ void OverlayWindow::buildUi() {
     m_previewBtn->setToolTip(QStringLiteral("Preview full clip · Ctrl+Space"));
     connect(m_previewBtn, &QPushButton::clicked, this, &OverlayWindow::previewCurrent);
     footerRow->addWidget(m_previewBtn);
+    auto* grip = new QSizeGrip(this);
+    grip->setToolTip(QStringLiteral("Drag to resize"));
+    grip->setAccessibleName(QStringLiteral("Resize clipboard window"));
+    footerRow->addWidget(grip);
     col->addLayout(footerRow);
 
     // Searching scans clip bodies. That is instant for an ordinary history; with
@@ -302,7 +319,7 @@ void OverlayWindow::buildUi() {
         else m_searchDelay->start();
     });
 
-    setFixedSize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
+    resize(Theme::OverlayWidth + 2 * Theme::ShadowMargin,
                  Theme::OverlayHeight + 2 * Theme::ShadowMargin);
 
     m_fade = new QPropertyAnimation(this, "windowOpacity", this);
@@ -328,7 +345,7 @@ void OverlayWindow::applyTheme() {
         "#brand, #brandMark { background:transparent; }"
         "#subtitle, #emptyHint { color:@muted; font-size:12px; }"
         "#search { background:@alt; border:1px solid @border; border-radius:10px;"
-        " padding:6px 10px; font-size:13px; selection-background-color:@accent; }"
+        " padding:8px 12px; font-size:14px; selection-background-color:@accent; }"
         "#search:focus { border-color:@accent; }"
         "#count { color:@muted; font-size:11px; font-weight:600; padding:4px 0; }"
         "QToolButton, QPushButton { background:transparent; border:1px solid transparent;"
@@ -337,7 +354,7 @@ void OverlayWindow::applyTheme() {
         "#iconBtn { padding:0; }"
         "QToolButton:focus, QPushButton:focus { border-color:@accent; }"
         "#filter { color:@muted; font-size:12px; padding:5px 9px; }"
-        "#filter:checked { color:@text; background:@alt; border:1px solid @border; font-weight:600; }"
+        "#filter:checked { color:@accent; background:@alt; border:1px solid @border; font-weight:600; }"
         "#capture { color:@accent; font-size:11px; background:@alt; }"
         "#newSnippet { color:@accent; font-size:12px; }"
         "#list { background:transparent; outline:none; }"
@@ -446,8 +463,16 @@ void OverlayWindow::resizeOverlay(const QScreen* screen) {
     if (!screen) screen = isVisible() ? this->screen() : QGuiApplication::screenAt(QCursor::pos());
     if (!screen) screen = QGuiApplication::primaryScreen();
     const QSize available = screen->availableGeometry().size();
-    setFixedSize(qMin((comfortable ? 520 : Theme::OverlayWidth) + 2 * Theme::ShadowMargin, available.width()),
-                 qMin((comfortable ? 600 : Theme::OverlayHeight) + 2 * Theme::ShadowMargin, available.height()));
+    setMinimumSize(qMin(452, available.width()), qMin(420, available.height()));
+    setMaximumSize(available);
+    const QString preset = comfortable ? QStringLiteral("comfortable") : QStringLiteral("compact");
+    const bool saved = m_db->setting(QStringLiteral("popup_size_preset")) == preset;
+    const int defaultWidth = (comfortable ? 560 : Theme::OverlayWidth) + 2 * Theme::ShadowMargin;
+    const int defaultHeight = (comfortable ? 660 : Theme::OverlayHeight) + 2 * Theme::ShadowMargin;
+    const int desiredWidth = saved ? m_db->setting(QStringLiteral("popup_width"), QString::number(defaultWidth)).toInt() : defaultWidth;
+    const int desiredHeight = saved ? m_db->setting(QStringLiteral("popup_height"), QString::number(defaultHeight)).toInt() : defaultHeight;
+    resize(qBound(minimumWidth(), desiredWidth, maximumWidth()),
+           qBound(minimumHeight(), desiredHeight, maximumHeight()));
     if (isVisible()) { // switching size in Settings must not push the popup off screen
         const QRect area = screen->availableGeometry();
         move(qBound(area.left(), x(), qMax(area.left(), area.right() - width() + 1)),
@@ -916,6 +941,30 @@ void OverlayWindow::openSettings() {
 }
 
 bool OverlayWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched->objectName() == QLatin1String("titleBar")) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                m_dragOffset = mouse->globalPosition().toPoint() - pos();
+                m_dragging = true;
+                return true;
+            }
+        }
+        if (event->type() == QEvent::MouseMove && m_dragging) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            const QPoint target = mouse->globalPosition().toPoint() - m_dragOffset;
+            if (QScreen* display = QGuiApplication::screenAt(mouse->globalPosition().toPoint())) {
+                const QRect area = display->availableGeometry();
+                move(qBound(area.left(), target.x(), qMax(area.left(), area.right() - width() + 1)),
+                     qBound(area.top(), target.y(), qMax(area.top(), area.bottom() - height() + 1)));
+            }
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonRelease) m_dragging = false;
+    }
+    if (watched == m_list && event->type() == QEvent::Resize)
+        QTimer::singleShot(0, this, &OverlayWindow::positionActionsBar);
+
     if (watched == m_search && event->type() == QEvent::MouseButtonPress)
         activateForSearch();
     if ((watched == m_search || watched == m_list) && event->type() == QEvent::KeyPress) {
@@ -997,6 +1046,11 @@ bool OverlayWindow::nativeEvent(const QByteArray& type, void* message, qintptr* 
 }
 
 void OverlayWindow::hideEvent(QHideEvent* event) {
+    m_dragging = false;
+    m_db->setSetting(QStringLiteral("popup_width"), QString::number(width()));
+    m_db->setSetting(QStringLiteral("popup_height"), QString::number(height()));
+    m_db->setSetting(QStringLiteral("popup_size_preset"),
+        m_db->setting(QStringLiteral("overlay_size"), QStringLiteral("compact")));
     m_popupInput->stop();
     // Only restore focus when we owned it, never on an outside click.
     if (isActiveWindow()) platform::restorePasteTarget(m_pasteTarget);
