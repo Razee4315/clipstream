@@ -1,23 +1,26 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="resources/readme-logo-dark.svg">
-    <img src="resources/readme-logo.svg" width="400" alt="ClipStream — clipboard manager">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/readme/banner-dark.webp">
+    <img src="docs/readme/banner.webp" width="880" alt="ClipStream">
   </picture>
 </p>
-<p align="center">Your clipboard, with a memory.</p>
+<p align="center"><strong>Your clipboard, with a memory.</strong></p>
 <p align="center">
   A fast, native Windows clipboard manager. Find it. Preview it. Paste it.
 </p>
 <p align="center">
   <a href="https://github.com/Razee4315/clipstream/releases/latest"><img src="https://img.shields.io/github/v/release/Razee4315/clipstream?color=e4472b&label=download" alt="Latest release"></a>
+  <a href="https://github.com/Razee4315/clipstream/releases"><img src="https://img.shields.io/github/downloads/Razee4315/clipstream/total?color=e4472b&label=downloads" alt="Total GitHub release downloads"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-e4472b" alt="Windows 10 and 11">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-64748b" alt="MIT license"></a>
 </p>
 <p align="center">
-  <img src="images/overlay-dark.png" width="452" alt="The compact ClipStream popup with search, filters, a pinned snippet, and clipboard history in dark mode">
+  <img src="docs/readme/popup.webp" width="520" alt="The compact ClipStream popup with search, filters, a pinned snippet, and clipboard history in dark mode">
 </p>
 
-## Get started
+<br />
+
+## <img src="docs/readme/start.svg" width="22" alt=""> Get started
 
 [**Download ClipStream for Windows →**](https://github.com/Razee4315/clipstream/releases/latest)
 
@@ -26,7 +29,7 @@
 Run the installer, copy something, then press **Ctrl+Shift+V** and click a clip to paste it.
 ClipStream stays in your system tray.
 
-## Made for your everyday copy & paste
+## <img src="docs/readme/copy.svg" width="22" alt=""> Made for your everyday copy & paste
 
 - **Paste right where you were.** The popup opens at your text cursor without taking focus, so your app and selection stay put. One click, or **Enter**, replaces the selection.
 - **Find anything faster.** Search text or app names; filter pinned clips, text, images, and links.
@@ -38,7 +41,9 @@ ClipStream stays in your system tray.
 Drag the popup header to move it, or use the bottom-right grip to resize it.
 Your size is remembered when the popup closes; choosing a different size preset in Settings resets it.
 
-## Shortcuts
+<br />
+
+## <img src="docs/readme/keyboard.svg" width="22" alt=""> Shortcuts
 
 | Action | Shortcut |
 | --- | --- |
