@@ -58,7 +58,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ClipStream-UI-checks
-          path: build/artifacts/
+          path: |
+            build/artifacts/
+            build/test-results.txt
 
       - name: Deploy (bundle Qt runtime)
         shell: pwsh
