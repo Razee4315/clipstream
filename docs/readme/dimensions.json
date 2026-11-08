@@ -1,0 +1,44 @@
+[
+  {
+    "file": "clipboard-flow.webp",
+    "source_size": [
+      2172,
+      724
+    ],
+    "alpha_range": [
+      255,
+      255
+    ],
+    "semi_transparent_fraction": 0.0,
+    "width": 1760,
+    "height": 587,
+    "bytes": 27862
+  },
+  {
+    "file": "keep-an-idea.webp",
+    "source_size": [
+      1536,
+      1024
+    ],
+    "alpha_range": [
+      255,
+      255
+    ],
+    "semi_transparent_fraction": 0.0,
+    "width": 800,
+    "height": 533,
+    "bytes": 16938
+  },
+  {
+    "file": "app-dark.webp",
+    "width": 512,
+    "height": 592,
+    "bytes": 17230
+  },
+  {
+    "file": "app-light.webp",
+    "width": 512,
+    "height": 592,
+    "bytes": 17286
+  }
+]

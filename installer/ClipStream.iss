@@ -3,7 +3,7 @@
 ; SourceDir is set to the project root so all paths below are root-relative.
 
 #define MyAppName "ClipStream"
-#define MyAppVersion "0.3.3"
+#define MyAppVersion "0.3.4"
 #define MyAppPublisher "Saqlain Abbas"
 #define MyAppURL "https://github.com/Razee4315/clipstream"
 #define MyAppExeName "ClipStream.exe"

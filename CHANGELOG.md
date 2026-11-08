@@ -2,6 +2,23 @@
 
 All notable changes to ClipStream.
 
+## [0.3.4] - 2026-11-08
+
+### Changed
+- Refreshed dark and light palettes, larger clip rows, and clearer search styling
+- Redesigned README with generated editorial artwork and current app screenshots
+
+### Added
+- Draggable popup header and a themed resize grip
+- Remembered popup dimensions, constrained to the available screen
+- Regression coverage for resizing and persistence, plus CI test reports and screenshots
+
+### Fixed
+- Reposition inline actions when the popup is resized
+- Keep the resize grip visible in light and dark themes
+
+[Full release details](docs/releases/0.3.4.md)
+
 ## [0.3.3] - 2026-10-05
 
 ### Changed
