@@ -20,7 +20,7 @@
 
 <br />
 
-## <img src="docs/readme/start.svg" width="22" alt=""> Get started
+## Get started
 
 [**Download ClipStream for Windows →**](https://github.com/Razee4315/clipstream/releases/latest)
 
@@ -29,7 +29,7 @@
 Run the installer, copy something, then press **Ctrl+Shift+V** and click a clip to paste it.
 ClipStream stays in your system tray.
 
-## <img src="docs/readme/copy.svg" width="22" alt=""> Made for your everyday copy & paste
+## Made for your everyday copy & paste
 
 - **Paste right where you were.** The popup opens at your text cursor without taking focus, so your app and selection stay put. One click, or **Enter**, replaces the selection.
 - **Find anything faster.** Search text or app names; filter pinned clips, text, images, and links.
@@ -43,7 +43,7 @@ Your size is remembered when the popup closes; choosing a different size preset 
 
 <br />
 
-## <img src="docs/readme/keyboard.svg" width="22" alt=""> Shortcuts
+## Shortcuts
 
 | Action | Shortcut |
 | --- | --- |

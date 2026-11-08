@@ -5,8 +5,8 @@ STYLE: Medium: editorial paper still life, top-down cut-paper relief. Palette: i
 
 Typography: existing Sora wordmark and bundled Sora font. Original logo retained.
 
-- banner.webp: 1760 × 500; display 880 pixels wide.
-- banner-dark.webp: 1760 × 500; display 880 pixels wide, with the original dark wordmark on charcoal.
+- banner.webp: 1760 × 400; display 880 pixels wide. Clean light banner (`#F5F2EC`) with the ClipStream wordmark and a minimal clipboard/paste card motif.
+- banner-dark.webp: 1760 × 400; display 880 pixels wide. Dark banner (`#121316`) with the dark wordmark and minimal clipboard/paste card motif.
 - popup.webp: 1040 × 1168; display 520 pixels wide. Original 452 × 512 product capture preserved and upscaled within a paper mat; no UI invented.
 
-Three original 24 × 24 outline SVG section icons, displayed at 22 pixels, follow the app icon stroke style. Combined WebP size: about 87 KB. Artwork generated using Codex CLI image_gen; typography and screenshot composition performed locally.
+Combined WebP size: about 64 KB.
