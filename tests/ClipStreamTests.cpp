@@ -147,10 +147,27 @@ private slots:
         QCOMPARE(failed.size(), 1);
     }
 
+    void popupResizesAndRemembersSize() {
+        db->setSetting(QStringLiteral("overlay_size"), QStringLiteral("compact"));
+        db->setSetting(QStringLiteral("popup_size_preset"), QStringLiteral("unset"));
+        OverlayWindow overlay(db.get(), nullptr);
+        overlay.showAtCursor();
+        QTest::qWait(100);
+        QVERIFY(overlay.minimumWidth() < overlay.maximumWidth());
+        overlay.resize(560, 580);
+        QTest::qWait(30);
+        QCOMPARE(overlay.size(), QSize(560, 580));
+        overlay.hide();
+        overlay.showAtCursor();
+        QCOMPARE(overlay.size(), QSize(560, 580));
+        overlay.hide();
+        db->setSetting(QStringLiteral("popup_size_preset"), QStringLiteral("unset"));
+    }
+
     void settingsPersistAndRender() {
         OverlayWindow overlay(db.get(), nullptr);
-        QCOMPARE(overlay.width(), 452);
-        QCOMPARE(overlay.height(), 512);
+        QCOMPARE(overlay.width(), 512);
+        QCOMPARE(overlay.height(), 592);
         SettingsDialog settings(db.get());
         settings.show();
         auto* size = settings.findChild<QComboBox*>(QStringLiteral("overlaySize"));
@@ -158,7 +175,7 @@ private slots:
         size->setCurrentIndex(1);
         QCOMPARE(db->setting(QStringLiteral("overlay_size")), QStringLiteral("comfortable"));
         overlay.applyTheme();
-        QCOMPARE(overlay.width(), 552);
+        QCOMPARE(overlay.width(), 592);
         size->setCurrentIndex(0);
         auto* tabs = settings.findChild<QTabWidget*>();
         QCOMPARE(tabs->count(), 3);

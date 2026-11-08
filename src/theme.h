@@ -20,13 +20,13 @@ constexpr int RadiusSm = 8, RadiusMd = 12, RadiusLg = 16;
 constexpr int FsTitle = 16, FsBody = 13, FsMeta = 11, FsMicro = 10;
 
 // ---- Overlay geometry -------------------------------------------------------
-constexpr int OverlayWidth  = 420;
-constexpr int OverlayHeight = 480;
+constexpr int OverlayWidth  = 480;
+constexpr int OverlayHeight = 560;
 constexpr int ShadowMargin  = 16;
 
 // ---- List rows --------------------------------------------------------------
-constexpr int RowHeight = 64;
-constexpr int BadgeSize = 32;
+constexpr int RowHeight = 72;
+constexpr int BadgeSize = 36;
 constexpr int ActionsReserve = 124;
 
 // ---- Colour palette (switchable, named) -------------------------------------
