@@ -149,7 +149,7 @@ private slots:
 
     void popupResizesAndRemembersSize() {
         db->setSetting(QStringLiteral("overlay_size"), QStringLiteral("compact"));
-        db->setSetting(QStringLiteral("popup_size_preset"), QString());
+        db->setSetting(QStringLiteral("popup_size_preset"), QStringLiteral("unset"));
         OverlayWindow overlay(db.get(), nullptr);
         overlay.showAtCursor();
         QTest::qWait(100);
@@ -161,7 +161,7 @@ private slots:
         overlay.showAtCursor();
         QCOMPARE(overlay.size(), QSize(560, 580));
         overlay.hide();
-        db->setSetting(QStringLiteral("popup_size_preset"), QString());
+        db->setSetting(QStringLiteral("popup_size_preset"), QStringLiteral("unset"));
     }
 
     void settingsPersistAndRender() {
